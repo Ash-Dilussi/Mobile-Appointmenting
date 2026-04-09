@@ -1,0 +1,53 @@
+name: in_call_appointment_handler
+description: In-Call Appointment Handler - A cross-platform mobile app for receptionists to manage appointments during phone calls.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.0
+  riverpod_annotation: ^2.6.0
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Database - Hive NoSQL (lightweight, fast, offline-first)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.3
+
+  # Secure Storage
+  flutter_secure_storage: ^9.2.2
+
+  # UI
+  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.8
+
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  equatable: ^2.0.5
+  json_annotation: ^4.9.0
+
+  # Table Calendar for Calendar View
+  table_calendar: ^3.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+  # Code Generation
+  build_runner: ^2.4.11
+  riverpod_generator: ^2.4.0
+  hive_generator: ^2.0.1
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
