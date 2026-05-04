@@ -17,7 +17,7 @@ class SyncQueueItemAdapter extends TypeAdapter<SyncQueueItem> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return SyncQueueItem()
-      ..id = fields[0] as int
+      ..id = fields[0] as int?
       ..entityType = fields[1] as String
       ..recordId = fields[2] as int
       ..operation = fields[3] as String

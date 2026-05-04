@@ -45,6 +45,12 @@ final servicesProvider = StreamProvider<List<Service>>((ref) {
   return db.watchAllServices();
 });
 
+// Service Stations provider
+final serviceStationsProvider = StreamProvider<List<ServiceStation>>((ref) {
+  final db = ref.watch(homeHiveProvider);
+  return db.watchAllServiceStations();
+});
+
 // Recent customers provider (for recent clients row)
 final recentCustomersProvider = StreamProvider<List<Customer>>((ref) {
   final db = ref.watch(homeHiveProvider);

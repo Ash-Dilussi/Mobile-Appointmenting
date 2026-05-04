@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../providers/call_history_provider.dart';
 
 class CallHistoryScreen extends ConsumerWidget {
   const CallHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(homeHiveProvider);
-
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -33,66 +33,60 @@ class CallHistoryScreen extends ConsumerWidget {
             ],
           ),
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            // All Calls Tab
-            StreamBuilder<List<CallLog>>(
-              stream: db.watchAllCallLogs(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            // Privacy notice for call recording
+            const _RecordingPrivacyNotice(),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  // All Calls Tab
+                  ref.watch(allCallLogsProvider).when(
+                    data: (calls) {
+                      if (calls.isEmpty) {
+                        return const _EmptyState(
+                          icon: Icons.phone_outlined,
+                          message: 'No call history yet',
+                        );
+                      }
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: calls.length,
+                        itemBuilder: (context, index) {
+                          return _CallHistoryCard(
+                            callLog: calls[index],
+                          );
+                        },
+                      );
+                    },
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                  ),
 
-                final calls = snapshot.data ?? [];
-
-                if (calls.isEmpty) {
-                  return _EmptyState(
-                    icon: Icons.phone_outlined,
-                    message: 'No call history yet',
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: calls.length,
-                  itemBuilder: (context, index) {
-                    return _CallHistoryCard(
-                      callLog: calls[index],
-                      ref: ref,
-                    );
-                  },
-                );
-              },
-            ),
-
-            // Missed Calls Tab
-            StreamBuilder<List<CallLog>>(
-              stream: db.watchMissedCalls(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final calls = snapshot.data ?? [];
-
-                if (calls.isEmpty) {
-                  return _EmptyState(
-                    icon: Icons.phone_missed_outlined,
-                    message: 'No missed calls',
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: calls.length,
-                  itemBuilder: (context, index) {
-                    return _MissedCallCard(
-                      callLog: calls[index],
-                      ref: ref,
-                    );
-                  },
-                );
-              },
+                  // Missed Calls Tab
+                  ref.watch(missedCallsProvider).when(
+                    data: (calls) {
+                      if (calls.isEmpty) {
+                        return const _EmptyState(
+                          icon: Icons.phone_missed_outlined,
+                          message: 'No missed calls',
+                        );
+                      }
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: calls.length,
+                        itemBuilder: (context, index) {
+                          return _MissedCallCard(
+                            callLog: calls[index],
+                          );
+                        },
+                      );
+                    },
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -119,17 +113,15 @@ class CallHistoryScreen extends ConsumerWidget {
   }
 }
 
-class _CallHistoryCard extends StatelessWidget {
+class _CallHistoryCard extends ConsumerWidget {
   final CallLog callLog;
-  final WidgetRef ref;
 
   const _CallHistoryCard({
     required this.callLog,
-    required this.ref,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
 
@@ -196,7 +188,7 @@ class _CallHistoryCard extends StatelessWidget {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: AppColors.secondary),
-            onSelected: (value) => _handleAction(context, value),
+            onSelected: (value) => _handleAction(context, value, ref),
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'call',
@@ -245,10 +237,10 @@ class _CallHistoryCard extends StatelessWidget {
     return '${remainingSeconds}s';
   }
 
-  void _handleAction(BuildContext context, String action) {
+  void _handleAction(BuildContext context, String action, WidgetRef ref) {
     switch (action) {
       case 'call':
-        // TODO: Implement call back
+        _handleCallBack(context, ref);
         break;
       case 'book':
         context.goNamed(
@@ -257,23 +249,42 @@ class _CallHistoryCard extends StatelessWidget {
         );
         break;
       case 'customer':
-        // TODO: Implement add as customer
+        context.goNamed(
+          'add-customer',
+          queryParameters: {'phone': callLog.phoneNumber},
+        );
         break;
+    }
+  }
+
+  Future<void> _handleCallBack(BuildContext context, WidgetRef ref) async {
+    final phoneNumber = callLog.phoneNumber;
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
+
+    if (await canLaunchUrl(uri)) {
+      // Mark as followed up before calling
+      final db = ref.read(homeHiveProvider);
+      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+      await launchUrl(uri);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open phone dialer')),
+        );
+      }
     }
   }
 }
 
-class _MissedCallCard extends StatelessWidget {
+class _MissedCallCard extends ConsumerWidget {
   final CallLog callLog;
-  final WidgetRef ref;
 
   const _MissedCallCard({
     required this.callLog,
-    required this.ref,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
 
@@ -324,9 +335,7 @@ class _MissedCallCard extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    // Call back
-                  },
+                  onPressed: () => _handleCallBack(context, ref),
                   icon: const Icon(Icons.call, size: 18),
                   label: const Text('Call Back'),
                 ),
@@ -349,6 +358,23 @@ class _MissedCallCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _handleCallBack(BuildContext context, WidgetRef ref) async {
+    final phoneNumber = callLog.phoneNumber;
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
+
+    if (await canLaunchUrl(uri)) {
+      final db = ref.read(homeHiveProvider);
+      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+      await launchUrl(uri);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open phone dialer')),
+        );
+      }
+    }
   }
 }
 
@@ -444,6 +470,50 @@ class _ImportCallSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
+        ],
+      ),
+    );
+  }
+}
+
+/// Privacy notice widget for call recording feature.
+/// Displays a persistent banner informing users that calls are recorded
+/// for customer safety and appointment tracking.
+class _RecordingPrivacyNotice extends StatelessWidget {
+  const _RecordingPrivacyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      color: AppColors.primaryContainer.withValues(alpha: 0.3),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            ),
+            child: Icon(
+              Icons.mic,
+              size: 16,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '🔴 Recording for customer safety — conversations are recorded locally for appointment booking',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.secondary,
+              ),
+            ),
+          ),
         ],
       ),
     );

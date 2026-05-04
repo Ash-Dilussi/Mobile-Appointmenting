@@ -25,15 +25,16 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..status = fields[5] as String
       ..notes = fields[6] as String?
       ..staffId = fields[7] as int?
-      ..createdAt = fields[8] as DateTime
-      ..updatedAt = fields[9] as DateTime
-      ..synced = fields[10] as bool;
+      ..stationId = fields[8] as int?
+      ..createdAt = fields[9] as DateTime
+      ..updatedAt = fields[10] as DateTime
+      ..synced = fields[11] as bool;
   }
 
   @override
   void write(BinaryWriter writer, Appointment obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -51,10 +52,12 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..writeByte(7)
       ..write(obj.staffId)
       ..writeByte(8)
-      ..write(obj.createdAt)
+      ..write(obj.stationId)
       ..writeByte(9)
-      ..write(obj.updatedAt)
+      ..write(obj.createdAt)
       ..writeByte(10)
+      ..write(obj.updatedAt)
+      ..writeByte(11)
       ..write(obj.synced);
   }
 

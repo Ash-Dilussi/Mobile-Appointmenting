@@ -29,12 +29,15 @@ class Appointment extends HiveObject {
   int? staffId;
 
   @HiveField(8)
-  late DateTime createdAt;
+  int? stationId;
 
   @HiveField(9)
-  late DateTime updatedAt;
+  late DateTime createdAt;
 
   @HiveField(10)
+  late DateTime updatedAt;
+
+  @HiveField(11)
   late bool synced;
 
   Appointment();

@@ -28,5 +28,8 @@ class Service extends HiveObject {
   @HiveField(7)
   late bool synced;
 
+  @HiveField(8)
+  bool isActive = true;
+
   Service();
 }

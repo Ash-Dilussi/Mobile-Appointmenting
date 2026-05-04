@@ -17,10 +17,11 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
     final today = DateTime.now();
-    final dateFormat = DateFormat('EEEE, MMMM d, yyyy');
+    final dateFormat = DateFormat('EEEE, MMMM d');
 
     // Extract user name from email
     final userName = authState.user?.email.split('@').first ?? 'Receptionist';
+    final userInitials = userName.isNotEmpty ? userName[0].toUpperCase() : 'R';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -29,22 +30,70 @@ class HomeScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with user name and date
+              // Header with logo, avatar, greeting and bell
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      'Hello, $userName',
-                      style: AppTypography.headlineMedium.copyWith(
-                        color: AppColors.onSurface,
+                    // App Logo
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      ),
+                      child: Icon(
+                        Icons.book_online,
+                        color: Colors.white,
+                        size: 28,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      dateFormat.format(today),
-                      style: AppTypography.bodyMedium.copyWith(
+                    const SizedBox(width: AppSpacing.md),
+                    // User Avatar
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          userInitials,
+                          style: AppTypography.titleMedium.copyWith(
+                            color: AppColors.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    // Greeting
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hello, $userName',
+                            style: AppTypography.headlineMedium.copyWith(
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          Text(
+                            dateFormat.format(today),
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Notification Bell
+                    IconButton(
+                      onPressed: () {},
+                      icon: Icon(
+                        Icons.notifications_outlined,
                         color: AppColors.secondary,
                       ),
                     ),
@@ -52,43 +101,111 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              // Upcoming Bookings Carousel
-              _UpcomingBookingsCarousel(),
+              // Upcoming Bookings - Stacked cards with glassmorphism
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+                child: _UpcomingBookingsList(),
+              ),
 
               const SizedBox(height: AppSpacing.xxl),
 
               // Availability Summary for Next Two Weeks
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-                child: Text(
-                  'Availability (Next 2 Weeks)',
-                  style: AppTypography.titleMedium,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryContainer.withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md,
+                          AppSpacing.md,
+                          AppSpacing.md,
+                          0,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Availability',
+                              style: AppTypography.titleMedium,
+                            ),
+                            Text(
+                              'Next 2 weeks',
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.secondary.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _AvailabilityGrid(),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              _AvailabilityGrid(),
 
               const SizedBox(height: AppSpacing.xxl),
 
               // Recent Clients Row
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Recent Clients',
-                      style: AppTypography.titleMedium,
-                    ),
-                    TextButton(
-                      onPressed: () => context.goNamed('customers'),
-                      child: const Text('See All'),
-                    ),
-                  ],
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryContainer.withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md,
+                          AppSpacing.md,
+                          AppSpacing.md,
+                          0,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Recent Clients',
+                              style: AppTypography.titleMedium,
+                            ),
+                            TextButton(
+                              onPressed: () => context.goNamed('customers'),
+                              child: const Text('See All'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _RecentClientsRow(),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              _RecentClientsRow(),
 
               const SizedBox(height: AppSpacing.xxl),
             ],
@@ -99,13 +216,13 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _UpcomingBookingsCarousel extends ConsumerWidget {
+class _UpcomingBookingsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final upcomingAppointments = ref.watch(upcomingAppointmentsProvider);
 
     return SizedBox(
-      height: 140,
+      height: 200,
       child: upcomingAppointments.when(
         data: (appointments) {
           if (appointments.isEmpty) {
@@ -115,14 +232,13 @@ class _UpcomingBookingsCarousel extends ConsumerWidget {
           }
           return ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
             itemCount: appointments.length,
             itemBuilder: (context, index) {
               return Padding(
                 padding: EdgeInsets.only(
                   right: index < appointments.length - 1 ? AppSpacing.md : 0,
                 ),
-                child: _BookingCarouselCard(appointment: appointments[index]),
+                child: _BookingSquareCard(appointment: appointments[index]),
               );
             },
           );
@@ -134,67 +250,166 @@ class _UpcomingBookingsCarousel extends ConsumerWidget {
   }
 }
 
-class _BookingCarouselCard extends StatelessWidget {
+class _BookingSquareCard extends ConsumerWidget {
   final Appointment appointment;
 
-  const _BookingCarouselCard({required this.appointment});
+  const _BookingSquareCard({required this.appointment});
+
+  Color _getPaleTimeBasedColor(DateTime time) {
+    final hour = time.hour;
+    if (hour >= 5 && hour < 11) {
+      // Morning - pale blue
+      return Color(0xFFB3D9FF);
+    } else if (hour >= 11 && hour < 17) {
+      // Noon - pale orange
+      return Color(0xFFFFCC80);
+    } else if (hour >= 17 && hour < 21) {
+      // Evening - pale purple
+      return Color(0xFFB39DDB);
+    } else {
+      // Night - pale slate
+      return Color(0xFF78909C);
+    }
+  }
+
+  String _getStatusText(String? status) {
+    switch (status) {
+      case 'upcoming':
+        return 'Upcoming';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'ongoing':
+        return 'In Progress';
+      case 'done':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return 'Scheduled';
+    }
+  }
 
   @override
-  Widget build(BuildContext context) {
-    final timeFormat = DateFormat('h:mm a');
+  Widget build(BuildContext context, WidgetRef ref) {
+    final timeFormat = DateFormat('HH:mm');
     final dateFormat = DateFormat('EEE, MMM d');
+    final paleColor = _getPaleTimeBasedColor(appointment.startTime);
 
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryContainer],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    // Look up customer and service from Hive
+    final hiveService = ref.watch(homeHiveProvider);
+    final customer = hiveService.getCustomerById(appointment.customerId ?? -1);
+    final service = appointment.serviceId != null
+        ? hiveService.getServiceById(appointment.serviceId!)
+        : null;
+
+    final customerName = customer?.name ?? 'Client';
+    final serviceName = service?.title ?? 'Appointment';
+    final statusText = _getStatusText(appointment.status);
+
+    return InkWell(
+      onTap: appointment.id != null
+          ? () {
+              context.goNamed(
+                'appointment-detail',
+                pathParameters: {'id': appointment.id.toString()},
+              );
+            }
+          : null,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryContainer.withValues(alpha: 0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top row: Status badge and chevron
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: paleColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.onSurface,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: AppColors.secondary,
+                  size: 20,
+                ),
+              ],
             ),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+            const Spacer(),
+            // Time block - card-in-card style
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: paleColor.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    timeFormat.format(appointment.startTime),
+                    style: TextStyle(
+                      color: AppColors.onSurface,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 24,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  Text(
+                    dateFormat.format(appointment.startTime),
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.secondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Text(
-              appointment.status.toUpperCase(),
-              style: AppTypography.labelSmall.copyWith(
-                color: Colors.white,
+            const Spacer(),
+            // Customer name
+            Text(
+              customerName,
+              style: AppTypography.bodyMedium.copyWith(
                 fontWeight: FontWeight.w600,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                timeFormat.format(appointment.startTime),
-                style: AppTypography.titleLarge.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+            const SizedBox(height: 2),
+            // Service name
+            Text(
+              serviceName,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.secondary,
               ),
-              Text(
-                dateFormat.format(appointment.startTime),
-                style: AppTypography.bodySmall.copyWith(
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-        ],
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -268,28 +483,9 @@ class _AvailabilityGrid extends StatelessWidget {
     ];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Column(
         children: [
-          // Week day headers
-          Row(
-            children: [
-              const SizedBox(width: 40), // Space for "This Week" label
-              ...['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(
-                (day) => Expanded(
-                  child: Center(
-                    child: Text(
-                      day,
-                      style: AppTypography.labelSmall.copyWith(
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
           // Availability grid
           ...weeks.asMap().entries.map((weekEntry) {
             final weekIndex = weekEntry.key;
@@ -297,11 +493,12 @@ class _AvailabilityGrid extends StatelessWidget {
             final levels = availabilityLevels[weekIndex];
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Row(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 40,
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
                     child: Text(
                       weekIndex == 0 ? 'This Week' : 'Next Week',
                       style: AppTypography.labelSmall.copyWith(
@@ -310,27 +507,29 @@ class _AvailabilityGrid extends StatelessWidget {
                       ),
                     ),
                   ),
-                  ...weekDays.asMap().entries.map((dayEntry) {
-                    final dayIndex = dayEntry.key;
-                    final date = dayEntry.value;
-                    final level = levels[dayIndex];
-                    final isToday = date.day == now.day &&
-                        date.month == now.month &&
-                        date.year == now.year;
+                  Row(
+                    children: weekDays.asMap().entries.map((dayEntry) {
+                      final dayIndex = dayEntry.key;
+                      final date = dayEntry.value;
+                      final level = levels[dayIndex];
+                      final isToday = date.day == now.day &&
+                          date.month == now.month &&
+                          date.year == now.year;
 
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                          ),
+                          child: _AvailabilityCell(
+                            level: level,
+                            isToday: isToday,
+                            date: date,
+                          ),
                         ),
-                        child: _AvailabilityCell(
-                          level: level,
-                          isToday: isToday,
-                          date: date,
-                        ),
-                      ),
-                    );
-                  }),
+                      );
+                    }).toList(),
+                  ),
                 ],
               ),
             );
@@ -364,6 +563,11 @@ class _AvailabilityCell extends StatelessWidget {
     required this.date,
   });
 
+  String _getDayAbbreviation() {
+    final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return weekdays[date.weekday - 1];
+  }
+
   @override
   Widget build(BuildContext context) {
     Color cellColor;
@@ -381,25 +585,24 @@ class _AvailabilityCell extends StatelessWidget {
       children: [
         Container(
           height: 32,
+          width: 32,
           decoration: BoxDecoration(
             color: cellColor,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            borderRadius: BorderRadius.circular(9999),
             border: isToday
                 ? Border.all(color: AppColors.primary, width: 2)
                 : null,
           ),
-          child: level > 0
-              ? Center(
-                  child: Text(
-                    '${(level * 100).round()}%',
-                    style: AppTypography.labelSmall.copyWith(
-                      color: level > 0.5 ? Colors.white : AppColors.onPrimaryContainer,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-              : null,
+          child: Center(
+            child: Text(
+              _getDayAbbreviation(),
+              style: AppTypography.labelSmall.copyWith(
+                color: level > 0.5 ? Colors.white : AppColors.onPrimaryContainer,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -452,7 +655,7 @@ class _RecentClientsRow extends ConsumerWidget {
       data: (customers) {
         if (customers.isEmpty) {
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: _EmptyClientsCard(),
           );
         }
@@ -460,7 +663,7 @@ class _RecentClientsRow extends ConsumerWidget {
           height: 100,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             itemCount: customers.length,
             itemBuilder: (context, index) {
               return Padding(
@@ -478,7 +681,7 @@ class _RecentClientsRow extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (_, __) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         child: _EmptyClientsCard(),
       ),
     );

@@ -20,12 +20,15 @@ class Customer extends HiveObject {
   String? notes;
 
   @HiveField(5)
-  late DateTime createdAt;
+  String? address;
 
   @HiveField(6)
-  late DateTime updatedAt;
+  late DateTime createdAt;
 
   @HiveField(7)
+  late DateTime updatedAt;
+
+  @HiveField(8)
   late bool synced;
 
   Customer();

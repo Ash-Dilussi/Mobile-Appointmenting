@@ -10,12 +10,16 @@ class HiveService {
   static const String appointmentsBox = 'appointments';
   static const String callLogsBox = 'callLogs';
   static const String syncQueueBox = 'syncQueue';
+  static const String serviceStationsBox = 'serviceStations';
+  static const String appointmentServicesBox = 'appointmentServices';
 
   late Box<Customer> _customersBox;
   late Box<Service> _servicesBox;
   late Box<Appointment> _appointmentsBox;
   late Box<CallLog> _callLogsBox;
   late Box<SyncQueueItem> _syncQueueBox;
+  late Box<ServiceStation> _serviceStationsBox;
+  late Box<AppointmentService> _appointmentServicesBox;
 
   Future<void> init() async {
     logger.info('HiveService', 'Initializing Hive database...');
@@ -28,6 +32,8 @@ class HiveService {
     Hive.registerAdapter(AppointmentAdapter());
     Hive.registerAdapter(CallLogAdapter());
     Hive.registerAdapter(SyncQueueItemAdapter());
+    Hive.registerAdapter(ServiceStationAdapter());
+    Hive.registerAdapter(AppointmentServiceAdapter());
 
     // Open boxes
     _customersBox = await Hive.openBox<Customer>(customersBox);
@@ -35,8 +41,20 @@ class HiveService {
     _appointmentsBox = await Hive.openBox<Appointment>(appointmentsBox);
     _callLogsBox = await Hive.openBox<CallLog>(callLogsBox);
     _syncQueueBox = await Hive.openBox<SyncQueueItem>(syncQueueBox);
+    _serviceStationsBox = await Hive.openBox<ServiceStation>(serviceStationsBox);
+    _appointmentServicesBox = await Hive.openBox<AppointmentService>(appointmentServicesBox);
 
     logger.info('HiveService', 'Hive database initialized successfully');
+  }
+
+  Future<void> clearAllData() async {
+    await _customersBox.clear();
+    await _servicesBox.clear();
+    await _appointmentsBox.clear();
+    await _callLogsBox.clear();
+    await _syncQueueBox.clear();
+    await _serviceStationsBox.clear();
+    await _appointmentServicesBox.clear();
   }
 
   // Customer operations
@@ -91,11 +109,11 @@ class HiveService {
   }
 
   // Service operations
-  List<Service> getAllServices() => _servicesBox.values.toList();
+  List<Service> getAllServices() => _servicesBox.values.where((s) => s.isActive).toList();
 
   Stream<List<Service>> watchAllServices() {
     final controller = StreamController<List<Service>>();
-    // Emit current value first
+    // Emit current value first (only active services)
     controller.add(getAllServices());
     // Then listen to changes
     final subscription = _servicesBox.watch().listen((_) {
@@ -133,6 +151,14 @@ class HiveService {
     await _servicesBox.delete(id);
   }
 
+  Future<void> softDeleteService(int id) async {
+    final service = getServiceById(id);
+    if (service != null) {
+      service.isActive = false;
+      await updateService(id, service);
+    }
+  }
+
   // Appointment operations
   List<Appointment> getAllAppointments() => _appointmentsBox.values.toList();
 
@@ -144,6 +170,13 @@ class HiveService {
     });
     controller.onCancel = () => subscription.cancel();
     return controller.stream;
+  }
+
+  List<Appointment> getAppointmentsForCustomer(int customerId) {
+    return _appointmentsBox.values
+        .where((a) => a.customerId == customerId)
+        .toList()
+      ..sort((a, b) => b.startTime.compareTo(a.startTime)); // Most recent first
   }
 
   List<Appointment> getAppointmentsForDate(DateTime date) {
@@ -279,6 +312,7 @@ class HiveService {
 
   Future<int> insertSyncItem(SyncQueueItem item) async {
     final key = await _syncQueueBox.add(item);
+    item.id = key;
     return key;
   }
 
@@ -288,5 +322,116 @@ class HiveService {
 
   Future<void> clearSyncQueue() async {
     await _syncQueueBox.clear();
+  }
+
+  // Service Station operations
+  List<ServiceStation> getAllServiceStations() => _serviceStationsBox.values.toList();
+
+  Stream<List<ServiceStation>> watchAllServiceStations() {
+    final controller = StreamController<List<ServiceStation>>();
+    controller.add(getAllServiceStations());
+    final subscription = _serviceStationsBox.watch().listen((_) {
+      controller.add(getAllServiceStations());
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  ServiceStation? getServiceStationById(int id) {
+    try {
+      return _serviceStationsBox.get(id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<int?> insertServiceStation(ServiceStation station) async {
+    station.createdAt = DateTime.now();
+    station.updatedAt = DateTime.now();
+    station.synced = false;
+    final key = await _serviceStationsBox.add(station);
+    station.id = key;
+    return key;
+  }
+
+  Future<void> updateServiceStation(int id, ServiceStation station) async {
+    station.id = id;
+    station.updatedAt = DateTime.now();
+    station.synced = false;
+    await _serviceStationsBox.put(id, station);
+  }
+
+  Future<void> deleteServiceStation(int id) async {
+    await _serviceStationsBox.delete(id);
+  }
+
+  // AppointmentService (line items) operations
+  List<AppointmentService> getAppointmentServicesForAppointment(int appointmentId) {
+    return _appointmentServicesBox.values
+        .where((a) => a.appointmentId == appointmentId)
+        .toList();
+  }
+
+  Stream<List<AppointmentService>> watchAppointmentServicesForAppointment(int appointmentId) {
+    final controller = StreamController<List<AppointmentService>>();
+    controller.add(getAppointmentServicesForAppointment(appointmentId));
+    final subscription = _appointmentServicesBox.watch().listen((_) {
+      controller.add(getAppointmentServicesForAppointment(appointmentId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  AppointmentService? getAppointmentServiceById(int id) {
+    try {
+      return _appointmentServicesBox.get(id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<int?> insertAppointmentService(AppointmentService appointmentService) async {
+    final key = await _appointmentServicesBox.add(appointmentService);
+    appointmentService.id = key;
+    return key;
+  }
+
+  Future<void> updateAppointmentService(int id, AppointmentService appointmentService) async {
+    appointmentService.id = id;
+    await _appointmentServicesBox.put(id, appointmentService);
+  }
+
+  Future<void> deleteAppointmentService(int id) async {
+    await _appointmentServicesBox.delete(id);
+  }
+
+  Future<void> deleteAppointmentServicesForAppointment(int appointmentId) async {
+    final toDelete = _appointmentServicesBox.values
+        .where((a) => a.appointmentId == appointmentId)
+        .map((a) => a.id)
+        .where((id) => id != null)
+        .cast<int>()
+        .toList();
+    for (final id in toDelete) {
+      await _appointmentServicesBox.delete(id);
+    }
+  }
+
+  // Theme preference operations
+  static const String settingsBox = 'settings';
+  static const String themeModeKey = 'themeMode';
+
+  Future<void> saveThemeMode(String mode) async {
+    final box = await Hive.openBox(settingsBox);
+    await box.put(themeModeKey, mode);
+  }
+
+  String getThemeMode() {
+    try {
+      final box = Hive.box(settingsBox);
+      return box.get(themeModeKey, defaultValue: 'system') as String;
+    } catch (e) {
+      return 'system';
+    }
   }
 }

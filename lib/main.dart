@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'core/database/hive_service.dart';
 import 'core/logging/logger_service.dart';
+import 'seed_dummy_data.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,9 @@ void main() async {
   logger.info('main', 'Initializing Hive database...');
   final hiveService = HiveService();
   await hiveService.init();
+
+  // Seed dummy data for testing (force: true to always reseed fresh)
+  await seedDummyData(hiveService, force: true);
 
   logger.info('main', 'Starting app...');
   runApp(

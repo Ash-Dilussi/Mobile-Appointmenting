@@ -90,6 +90,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      // Verify password against stored hash
+      final storedPasswordHash = await _storage.read(key: 'user_password_hash');
+      if (storedPasswordHash != null) {
+        // User has set a password before, verify it
+        final inputHash = _hashPassword(password);
+        if (inputHash != storedPasswordHash) {
+          state = const AuthState(
+            status: AuthStatus.unauthenticated,
+            error: 'Incorrect password',
+          );
+          return;
+        }
+      }
+
       // Store token
       await _storage.write(key: 'auth_token', value: 'valid');
       await _storage.write(key: 'user_email', value: email);
@@ -126,6 +140,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      // Store password hash for password reset capability
+      await _storage.write(key: 'user_password_hash', value: _hashPassword(password));
       await _storage.write(key: 'auth_token', value: 'valid');
       await _storage.write(key: 'user_email', value: email);
 
@@ -155,10 +171,51 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _storage.delete(key: 'auth_token');
       await _storage.delete(key: 'user_email');
+      // Keep password hash for password reset capability
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       state = const AuthState(status: AuthStatus.unauthenticated);
     }
+  }
+
+  /// Send password reset email (simulated)
+  /// Returns true if email exists in storage
+  Future<bool> sendPasswordResetEmail(String email) async {
+    final storedEmail = await _storage.read(key: 'user_email');
+    if (storedEmail != null && storedEmail.toLowerCase() == email.toLowerCase()) {
+      // Store pending reset state
+      await _storage.write(key: 'pending_reset_email', value: email);
+      await _storage.write(key: 'reset_token', value: 'demo-reset-token');
+      return true;
+    }
+    return false;
+  }
+
+  /// Reset password with email and new password
+  Future<bool> resetPassword(String email, String newPassword) async {
+    if (newPassword.length < 6) {
+      return false;
+    }
+
+    final pendingEmail = await _storage.read(key: 'pending_reset_email');
+    if (pendingEmail == null || pendingEmail.toLowerCase() != email.toLowerCase()) {
+      return false;
+    }
+
+    // Update password hash
+    await _storage.write(key: 'user_password_hash', value: _hashPassword(newPassword));
+    // Clear reset state
+    await _storage.delete(key: 'pending_reset_email');
+    await _storage.delete(key: 'reset_token');
+
+    return true;
+  }
+
+  /// Simple hash function for demo purposes
+  String _hashPassword(String password) {
+    // Using base64 encoding as a simple "hash" for demo
+    // In production, use proper hashing like bcrypt or argon2
+    return password.split('').reversed.join() + password.length.toString();
   }
 }
 

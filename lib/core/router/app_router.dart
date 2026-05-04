@@ -4,17 +4,23 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/main_shell.dart';
 import '../../features/calendar/presentation/screens/calendar_screen.dart';
 import '../../features/call_history/presentation/screens/call_history_screen.dart';
 import '../../features/customers/presentation/screens/customers_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
+import '../../features/customers/presentation/screens/add_customer_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/services/presentation/screens/service_management_screen.dart';
 import '../../features/services/presentation/screens/add_service_screen.dart';
+import '../../features/services/presentation/screens/station_management_screen.dart';
+import '../../features/services/presentation/screens/add_station_screen.dart';
 import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/booking/presentation/screens/booking_confirmation_screen.dart';
+import '../../features/booking/presentation/screens/appointment_detail_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 
 // Navigation shell key
@@ -32,7 +38,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = authState.status == AuthStatus.authenticated;
       final isAuthRoute = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register';
+          state.matchedLocation == '/register' ||
+          state.matchedLocation == '/forgot-password' ||
+          state.matchedLocation == '/reset-password';
 
       if (!isLoggedIn && !isAuthRoute) {
         return '/login';
@@ -55,6 +63,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        name: 'forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        name: 'reset-password',
+        builder: (context, state) {
+          final email = state.uri.queryParameters['email'];
+          return ResetPasswordScreen(resetEmail: email);
+        },
       ),
 
       // Main app shell with bottom navigation
@@ -112,6 +133,22 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full screen routes (outside shell)
       GoRoute(
+        path: '/customers/add',
+        name: 'add-customer',
+        builder: (context, state) {
+          final phone = state.uri.queryParameters['phone'];
+          return AddCustomerScreen(initialPhone: phone);
+        },
+      ),
+      GoRoute(
+        path: '/customers/edit/:id',
+        name: 'edit-customer',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return AddCustomerScreen(customerId: id);
+        },
+      ),
+      GoRoute(
         path: '/customer/:id',
         name: 'customer-profile',
         builder: (context, state) {
@@ -138,14 +175,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: '/stations',
+        name: 'station-management',
+        builder: (context, state) => const StationManagementScreen(),
+      ),
+      GoRoute(
+        path: '/stations/add',
+        name: 'add-station',
+        builder: (context, state) => const AddStationScreen(),
+      ),
+      GoRoute(
+        path: '/stations/edit/:id',
+        name: 'edit-station',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return AddStationScreen(stationId: id);
+        },
+      ),
+      GoRoute(
         path: '/booking',
         name: 'booking',
         builder: (context, state) {
           final phone = state.uri.queryParameters['phone'];
           final callLogId = state.uri.queryParameters['callLogId'];
+          final dateStr = state.uri.queryParameters['date'];
           return BookingScreen(
             prefilledPhone: phone,
             callLogId: callLogId != null ? int.parse(callLogId) : null,
+            prefilledDate: dateStr != null ? DateTime.tryParse(dateStr) : null,
           );
         },
       ),
@@ -155,6 +212,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = int.parse(state.pathParameters['appointmentId']!);
           return BookingConfirmationScreen(appointmentId: id);
+        },
+      ),
+      GoRoute(
+        path: '/appointment/:id',
+        name: 'appointment-detail',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return AppointmentDetailScreen(appointmentId: id);
+        },
+      ),
+      GoRoute(
+        path: '/booking/edit/:id',
+        name: 'booking-edit',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return BookingScreen(appointmentId: id);
         },
       ),
     ],

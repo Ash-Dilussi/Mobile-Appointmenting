@@ -85,4 +85,32 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+
+  // Dark Mode Colors - Charcoal surfaces preserving Solar Orange brand
+  static const Color darkSurface = Color(0xFF1A1C1C);
+  static const Color darkSurfaceBright = Color(0xFF2F3131);
+  static const Color darkSurfaceContainer = Color(0xFF252728);
+  static const Color darkSurfaceContainerHigh = Color(0xFF353838);
+  static const Color darkSurfaceContainerHighest = Color(0xFF3F4141);
+  static const Color darkSurfaceContainerLow = Color(0xFF222425);
+  static const Color darkSurfaceContainerLowest = Color(0xFF2F3131);
+  static const Color darkSurfaceDim = Color(0xFF141516);
+  static const Color darkSurfaceVariant = Color(0xFF3F4141);
+
+  // Dark On Surface
+  static const Color darkOnSurface = Color(0xFFE2E2E2);
+  static const Color darkOnSurfaceVariant = Color(0xFFCAC4BE);
+
+  // Dark Background
+  static const Color darkBackground = Color(0xFF1A1C1C);
+  static const Color darkOnBackground = Color(0xFFE2E2E2);
+
+  // Dark Inverse
+  static const Color darkInverseSurface = Color(0xFFE2E2E2);
+  static const Color darkInverseOnSurface = Color(0xFF2F3131);
+  static const Color darkInversePrimary = Color(0xFFCC7000);
+
+  // Dark Outline
+  static const Color darkOutline = Color(0xFF8A8480);
+  static const Color darkOutlineVariant = Color(0xFF443F3A);
 }

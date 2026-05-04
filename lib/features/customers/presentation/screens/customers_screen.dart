@@ -101,7 +101,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       onTap: () {
                         context.goNamed(
                           'customer-profile',
-                          pathParameters: {'id': customers[index].id.toString()},
+                          pathParameters: {
+                            'id': customers[index].id.toString()
+                          },
                         );
                       },
                     );
@@ -113,9 +115,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Add new customer
-        },
+        onPressed: () => GoRouter.of(context).push('/customers/add'),
         child: const Icon(Icons.person_add),
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -40,7 +41,10 @@ class CustomerProfileScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              // TODO: Edit customer
+              context.goNamed(
+                'edit-customer',
+                pathParameters: {'id': customerId.toString()},
+              );
             },
           ),
         ],
@@ -129,7 +133,7 @@ class CustomerProfileScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.md),
 
-            // TODO: Add appointment history list
+            _AppointmentHistory(customerId: customerId),
 
             const SizedBox(height: AppSpacing.xxl),
 
@@ -151,9 +155,7 @@ class CustomerProfileScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () {
-                      // TODO: Call customer
-                    },
+                    onPressed: () => _handleCall(context, customer.phoneNumber),
                     icon: const Icon(Icons.call),
                     label: const Text('Call'),
                   ),
@@ -164,6 +166,19 @@ class CustomerProfileScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _handleCall(BuildContext context, String phoneNumber) async {
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open phone dialer')),
+        );
+      }
+    }
   }
 }
 
@@ -235,6 +250,110 @@ class _InfoRow extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AppointmentHistory extends ConsumerWidget {
+  final int customerId;
+
+  const _AppointmentHistory({required this.customerId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final db = ref.watch(homeHiveProvider);
+    final appointments = db.getAppointmentsForCustomer(customerId);
+
+    if (appointments.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
+        child: Center(
+          child: Text(
+            'No appointments yet',
+            style: AppTypography.bodyMedium.copyWith(
+              color: AppColors.secondary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: appointments.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final apt = appointments[index];
+          final service = db.getServiceById(apt.serviceId ?? 0);
+          final dateFormat = DateFormat('MMM d, yyyy');
+          final timeFormat = DateFormat('h:mm a');
+
+          Color statusColor;
+          switch (apt.status) {
+            case 'done':
+              statusColor = AppColors.success;
+              break;
+            case 'cancelled':
+              statusColor = AppColors.error;
+              break;
+            case 'ongoing':
+              statusColor = AppColors.primary;
+              break;
+            default:
+              statusColor = AppColors.secondary;
+          }
+
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xs,
+            ),
+            title: Text(
+              service?.title ?? 'Unknown Service',
+              style: AppTypography.bodyMedium,
+            ),
+            subtitle: Text(
+              '${dateFormat.format(apt.startTime)} at ${timeFormat.format(apt.startTime)}',
+              style: AppTypography.bodySmall,
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              ),
+              child: Text(
+                apt.status.toUpperCase(),
+                style: AppTypography.labelSmall.copyWith(
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            onTap: () {
+              if (apt.id != null) {
+                context.goNamed(
+                  'appointment-detail',
+                  pathParameters: {'id': apt.id.toString()},
+                );
+              }
+            },
+          );
+        },
       ),
     );
   }

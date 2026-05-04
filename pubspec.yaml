@@ -1,5 +1,5 @@
-name: in_call_appointment_handler
-description: In-Call Appointment Handler - A cross-platform mobile app for receptionists to manage appointments during phone calls.
+name: bookly
+description: Bookly - Quick appointment booking during calls. Receptionist appointment handler.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -23,7 +23,7 @@ dependencies:
   path_provider: ^2.1.3
 
   # Secure Storage
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^10.0.0
 
   # UI
   google_fonts: ^6.2.1
@@ -34,14 +34,23 @@ dependencies:
   uuid: ^4.4.0
   equatable: ^2.0.5
   json_annotation: ^4.9.0
+  url_launcher: ^6.3.0
 
   # Table Calendar for Calendar View
   table_calendar: ^3.1.1
+
+  # Call Recording & Speech
+  permission_handler: ^11.3.1
+  speech_to_text: ^6.6.0
+
+  # Splash Screen
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  mocktail: ^1.0.0
 
   # Code Generation
   build_runner: ^2.4.11
@@ -51,3 +60,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/

@@ -5,7 +5,7 @@ part 'sync_queue_item.g.dart';
 @HiveType(typeId: 4)
 class SyncQueueItem extends HiveObject {
   @HiveField(0)
-  late int id;
+  int? id;
 
   @HiveField(1)
   late String entityType;

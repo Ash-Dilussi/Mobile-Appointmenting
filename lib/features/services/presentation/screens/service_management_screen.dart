@@ -80,13 +80,13 @@ class ServiceManagementScreen extends ConsumerWidget {
   }
 }
 
-class _ServiceCard extends StatelessWidget {
+class _ServiceCard extends ConsumerWidget {
   final Service service;
 
   const _ServiceCard({required this.service});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currencyFormat = NumberFormat.currency(symbol: '\$');
 
     return Container(
@@ -146,7 +146,7 @@ class _ServiceCard extends StatelessWidget {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: AppColors.secondary),
-            onSelected: (value) => _handleAction(context, value),
+            onSelected: (value) => _handleAction(context, value, ref),
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'edit',
@@ -175,7 +175,7 @@ class _ServiceCard extends StatelessWidget {
     );
   }
 
-  void _handleAction(BuildContext context, String action) {
+  void _handleAction(BuildContext context, String action, WidgetRef ref) {
     switch (action) {
       case 'edit':
         context.goNamed(
@@ -184,12 +184,12 @@ class _ServiceCard extends StatelessWidget {
         );
         break;
       case 'delete':
-        _showDeleteDialog(context);
+        _showDeleteDialog(context, ref);
         break;
     }
   }
 
-  void _showDeleteDialog(BuildContext context) {
+  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -203,9 +203,10 @@ class _ServiceCard extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              // TODO: Delete service
-              Navigator.pop(context);
+            onPressed: () async {
+              final db = ref.read(homeHiveProvider);
+              await db.softDeleteService(service.id!);
+              if (context.mounted) Navigator.pop(context);
             },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.error,
