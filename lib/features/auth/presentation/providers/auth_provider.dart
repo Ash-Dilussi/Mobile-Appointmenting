@@ -9,12 +9,37 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   );
 });
 
+// Secure storage keys for profile data
+const String _keyUserName = 'user_name';
+const String _keyUserPhone = 'user_phone';
+
 // Local user model for demo auth
 class LocalUser {
   final String uid;
   final String email;
+  final String name;
+  final String? phone;
 
-  LocalUser({required this.uid, required this.email});
+  LocalUser({
+    required this.uid,
+    required this.email,
+    this.name = '',
+    this.phone,
+  });
+
+  LocalUser copyWith({
+    String? uid,
+    String? email,
+    String? name,
+    String? phone,
+  }) {
+    return LocalUser(
+      uid: uid ?? this.uid,
+      email: email ?? this.email,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+    );
+  }
 }
 
 // Auth state
@@ -58,12 +83,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Check for stored session
     final token = await _storage.read(key: 'auth_token');
     final storedEmail = await _storage.read(key: 'user_email');
+    final storedName = await _storage.read(key: _keyUserName) ?? '';
+    final storedPhone = await _storage.read(key: _keyUserPhone);
 
     if (token != null && storedEmail != null) {
       // User was previously logged in
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: LocalUser(uid: 'local-user', email: storedEmail),
+        user: LocalUser(uid: 'local-user', email: storedEmail, name: storedName, phone: storedPhone),
       );
     } else {
       state = const AuthState(status: AuthStatus.unauthenticated);
@@ -108,9 +135,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _storage.write(key: 'auth_token', value: 'valid');
       await _storage.write(key: 'user_email', value: email);
 
+      // Load profile data
+      final storedName = await _storage.read(key: _keyUserName) ?? '';
+      final storedPhone = await _storage.read(key: _keyUserPhone);
+
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: LocalUser(uid: 'local-user', email: email),
+        user: LocalUser(uid: 'local-user', email: email, name: storedName, phone: storedPhone),
       );
     } catch (e) {
       state = AuthState(
@@ -147,7 +178,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: LocalUser(uid: 'local-user', email: email),
+        user: LocalUser(uid: 'local-user', email: email, name: '', phone: null),
       );
     } catch (e) {
       state = AuthState(
@@ -171,10 +202,76 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _storage.delete(key: 'auth_token');
       await _storage.delete(key: 'user_email');
+      await _storage.delete(key: _keyUserName);
+      await _storage.delete(key: _keyUserPhone);
       // Keep password hash for password reset capability
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+  }
+
+  /// Update user profile (name and/or phone)
+  Future<void> updateProfile({String? name, String? phone}) async {
+    state = state.copyWith(error: null);
+
+    try {
+      if (name != null && name.isNotEmpty) {
+        await _storage.write(key: _keyUserName, value: name);
+      }
+      if (phone != null) {
+        if (phone.isEmpty) {
+          await _storage.delete(key: _keyUserPhone);
+        } else {
+          await _storage.write(key: _keyUserPhone, value: phone);
+        }
+      }
+
+      final currentUser = state.user;
+      if (currentUser != null) {
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: currentUser.copyWith(
+            name: name ?? currentUser.name,
+            phone: phone != null && phone.isNotEmpty ? phone : null,
+          ),
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(error: 'Failed to update profile');
+    }
+  }
+
+  /// Change password - verifies current password first
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    state = state.copyWith(error: null);
+
+    try {
+      // Verify current password
+      final storedPasswordHash = await _storage.read(key: 'user_password_hash');
+      if (storedPasswordHash == null) {
+        state = state.copyWith(error: 'No password set. Please sign in again.');
+        return false;
+      }
+
+      final inputHash = _hashPassword(currentPassword);
+      if (inputHash != storedPasswordHash) {
+        state = state.copyWith(error: 'Current password is incorrect');
+        return false;
+      }
+
+      // Validate new password
+      if (newPassword.length < 6) {
+        state = state.copyWith(error: 'New password must be at least 6 characters');
+        return false;
+      }
+
+      // Update password hash
+      await _storage.write(key: 'user_password_hash', value: _hashPassword(newPassword));
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: 'Failed to change password');
+      return false;
     }
   }
 

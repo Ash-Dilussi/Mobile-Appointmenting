@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+// speech_to_text disabled - causes Kotlin daemon crash on paths with spaces
+// import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../../../../core/providers/auth_providers.dart';
+import '../../../../core/providers/calendar_providers.dart';
 
 class BookingScreen extends ConsumerStatefulWidget {
   final String? prefilledPhone;
@@ -55,6 +58,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   // Service notes (per appointment)
   Map<int, String> _serviceNotes = {};
+
+  bool _syncWithGoogle = false;
 
   @override
   void initState() {
@@ -474,8 +479,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
       // Get or create customer
       int customerId;
+      Customer? customer;
       if (_existingCustomer != null) {
         customerId = _existingCustomer!.id!;
+        customer = _existingCustomer;
       } else {
         // Create new customer
         final name = _nameController.text.trim();
@@ -486,6 +493,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           ..updatedAt = DateTime.now()
           ..synced = false;
         customerId = (await db.insertCustomer(newCustomer))!;
+        customer = newCustomer;
       }
 
       // Calculate start and end time using total duration from selected services
@@ -526,7 +534,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             ? (existingAppointment?.createdAt ?? DateTime.now())
             : DateTime.now()
         ..updatedAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..syncWithGoogle = _syncWithGoogle;
 
       int appointmentId;
       if (isEditMode) {
@@ -535,6 +544,38 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         appointmentId = widget.appointmentId!;
       } else {
         appointmentId = (await db.insertAppointment(appointment))!;
+
+      // Google Calendar sync (non-blocking - local save always succeeds)
+      if (_syncWithGoogle) {
+        final authService = ref.read(googleAuthServiceProvider);
+        if (authService.isSignedIn) {
+          try {
+            final googleEventId = await ref
+                .read(googleCalendarServiceProvider)
+                .createEvent(
+                  title: 'Appointment: ${customer?.name ?? 'Customer'}',
+                  start: startTime,
+                  end: endTime,
+                  description: _notesController.text.trim().isNotEmpty
+                      ? _notesController.text.trim()
+                      : null,
+                );
+            // Update appointment with Google Event ID
+            appointment.googleEventId = googleEventId;
+            await db.updateAppointment(appointmentId, appointment);
+          } catch (e) {
+            // Google sync failed - appointment already saved to Hive
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Saved locally. Google sync failed: $e'),
+                  backgroundColor: AppColors.warning,
+                ),
+              );
+            }
+          }
+        }
+      }
       }
 
       // Update call log if linked (only for new appointments)
@@ -873,6 +914,33 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 ),
               ),
 
+              // Google Calendar Sync
+              Consumer(
+                builder: (context, ref, _) {
+                  final authService = ref.watch(googleAuthServiceProvider);
+                  if (!authService.isSignedIn) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      const SizedBox(height: AppSpacing.md),
+                      CheckboxListTile(
+                        value: _syncWithGoogle,
+                        onChanged: (value) {
+                          setState(() {
+                            _syncWithGoogle = value ?? false;
+                          });
+                        },
+                        title: const Text('Add to Google Calendar'),
+                        subtitle: const Text('Creates an event in your primary Google Calendar'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
+                  );
+                },
+              ),
+
               const SizedBox(height: AppSpacing.xxl),
 
               // Save Button
@@ -1122,11 +1190,11 @@ class _VoiceInputSheet extends ConsumerStatefulWidget {
 }
 
 class _VoiceInputSheetState extends ConsumerState<_VoiceInputSheet> {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  // speech_to_text disabled - causes Kotlin daemon crash on paths with spaces
   bool _isListening = false;
   bool _speechAvailable = false;
   String _lastWords = '';
-  String _statusText = 'Tap the microphone to speak appointment details';
+  String _statusText = 'Voice booking is temporarily unavailable';
 
   // Parsed data
   String? _parsedPhone;
@@ -1138,158 +1206,30 @@ class _VoiceInputSheetState extends ConsumerState<_VoiceInputSheet> {
   @override
   void initState() {
     super.initState();
-    _initSpeech();
+    // speech temporarily disabled
   }
 
   Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize(
-      onError: (error) {
-        setState(() {
-          _statusText = 'Speech error: ${error.errorMsg}';
-          _isListening = false;
-        });
-      },
-      onStatus: (status) {
-        if (status == 'done' || status == 'notListening') {
-          setState(() {
-            _isListening = false;
-            if (_lastWords.isNotEmpty) {
-              _statusText = 'Processing: "$_lastWords"';
-              _parseSpeech(_lastWords);
-            }
-          });
-        }
-      },
-    );
-    setState(() {});
+    setState(() {
+      _speechAvailable = false;
+      _statusText = 'Voice booking is temporarily unavailable';
+    });
   }
 
   void _startListening() async {
-    if (!_speechAvailable) {
-      setState(() {
-        _statusText = 'Speech recognition not available on this device';
-      });
-      return;
-    }
-
     setState(() {
-      _isListening = true;
-      _statusText = 'Listening...';
-      _lastWords = '';
+      _statusText = 'Voice booking is temporarily unavailable';
     });
-
-    await _speech.listen(
-      onResult: (result) {
-        setState(() {
-          _lastWords = result.recognizedWords;
-          _statusText = _lastWords;
-        });
-      },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
-      partialResults: true,
-      cancelOnError: true,
-    );
   }
 
   void _stopListening() async {
-    await _speech.stop();
     setState(() {
       _isListening = false;
     });
   }
 
   void _parseSpeech(String text) {
-    final lower = text.toLowerCase();
-
-    // Parse phone number - look for digit patterns
-    final phonePattern = RegExp(r'[\+]?[\d\s\-()]{10,}');
-    final phoneMatch = phonePattern.firstMatch(text);
-    if (phoneMatch != null) {
-      _parsedPhone = phoneMatch.group(0)?.replaceAll(RegExp(r'[^\d+]'), '');
-    }
-
-    // Parse name - "with John", "for John", "appointment for John"
-    final nameKeywords = ['with ', 'for ', 'appointment for ', 'book appointment for '];
-    for (final keyword in nameKeywords) {
-      final idx = lower.indexOf(keyword);
-      if (idx != -1) {
-        final start = idx + keyword.length;
-        final end = text.indexOf(' ', start);
-        if (end != -1 && end > start) {
-          final extractedName = text.substring(start, end).trim();
-          if (extractedName.isNotEmpty && extractedName.length <= 30) {
-            _parsedName = extractedName;
-            break;
-          }
-        }
-      }
-    }
-
-    // Parse date - tomorrow, today, specific day names
-    if (lower.contains('tomorrow')) {
-      _parsedDate = DateTime.now().add(const Duration(days: 1));
-    } else if (lower.contains('today')) {
-      _parsedDate = DateTime.now();
-    } else {
-      final dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      for (final day in dayNames) {
-        if (lower.contains(day)) {
-          _parsedDate = _nextDateForDay(day);
-          break;
-        }
-      }
-    }
-
-    // Parse time - "at 3pm", "at 3:30", "in the afternoon"
-    final timePatterns = [
-      RegExp(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)', caseSensitive: false),
-      RegExp(r'(?:at|in the)\s*(morning|afternoon|evening)', caseSensitive: false),
-    ];
-    for (final pattern in timePatterns) {
-      final match = pattern.firstMatch(lower);
-      if (match != null) {
-        if (match.group(1) != null) {
-          int hour = int.parse(match.group(1)!);
-          final minute = match.group(2) != null ? int.parse(match.group(2)!) : 0;
-          final isPM = match.group(3)?.toLowerCase() == 'pm';
-          if (isPM && hour < 12) hour += 12;
-          _parsedTime = TimeOfDay(hour: hour, minute: minute);
-        } else if (match.group(4) != null) {
-          final period = match.group(4)!.toLowerCase();
-          if (period == 'morning') {
-            _parsedTime = const TimeOfDay(hour: 9, minute: 0);
-          } else if (period == 'afternoon') {
-            _parsedTime = const TimeOfDay(hour: 15, minute: 0);
-          } else if (period == 'evening') {
-            _parsedTime = const TimeOfDay(hour: 18, minute: 0);
-          }
-        }
-        break;
-      }
-    }
-
-    // Parse service - match against common service keywords
-    final serviceKeywords = ['consultation', 'cut', 'trim', 'style', 'color', 'treatment', 'massage', 'facial', 'cleanup'];
-    final services = ref.read(servicesProvider);
-    services.whenData((serviceList) {
-      for (final keyword in serviceKeywords) {
-        if (lower.contains(keyword)) {
-          // Find matching service by keyword in title
-          for (final service in serviceList) {
-            if (service.title.toLowerCase().contains(keyword)) {
-              _parsedServiceId = service.id;
-              break;
-            }
-          }
-          if (_parsedServiceId != null) break;
-        }
-      }
-    });
-
-    setState(() {
-      _statusText = _buildStatusText();
-    });
+    // disabled - speech_to_text package causes Kotlin daemon crash on paths with spaces
   }
 
   DateTime _nextDateForDay(String day) {

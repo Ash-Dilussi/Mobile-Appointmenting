@@ -1,4 +1,4 @@
-package com.example.in_call_appointment_handler
+package com.ashDilussi.bookly
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -19,10 +19,10 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.in_call_appointment_handler/call_detection"
-    private val EVENT_CHANNEL = "com.example.in_call_appointment_handler/call_events"
-    private val RECORD_CHANNEL = "com.example.in_call_appointment_handler/recording"
-    private val RECORD_EVENT_CHANNEL = "com.example.in_call_appointment_handler/recording_events"
+    private val CHANNEL = "com.ashDilussi.bookly/call_detection"
+    private val EVENT_CHANNEL = "com.ashDilussi.bookly/call_events"
+    private val RECORD_CHANNEL = "com.ashDilussi.bookly/recording"
+    private val RECORD_EVENT_CHANNEL = "com.ashDilussi.bookly/recording_events"
 
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null

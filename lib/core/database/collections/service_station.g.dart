@@ -24,13 +24,14 @@ class ServiceStationAdapter extends TypeAdapter<ServiceStation> {
       ..description = fields[4] as String?
       ..createdAt = fields[5] as DateTime
       ..updatedAt = fields[6] as DateTime
-      ..synced = fields[7] as bool;
+      ..synced = fields[7] as bool
+      ..institutionId = fields[8] as String?;
   }
 
   @override
   void write(BinaryWriter writer, ServiceStation obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -46,7 +47,9 @@ class ServiceStationAdapter extends TypeAdapter<ServiceStation> {
       ..writeByte(6)
       ..write(obj.updatedAt)
       ..writeByte(7)
-      ..write(obj.synced);
+      ..write(obj.synced)
+      ..writeByte(8)
+      ..write(obj.institutionId);
   }
 
   @override

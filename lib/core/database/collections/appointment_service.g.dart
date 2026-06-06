@@ -22,13 +22,14 @@ class AppointmentServiceAdapter extends TypeAdapter<AppointmentService> {
       ..serviceId = fields[2] as int?
       ..priceOverride = fields[3] as double?
       ..notes = fields[4] as String?
-      ..durationOverride = fields[5] as int?;
+      ..durationOverride = fields[5] as int?
+      ..institutionId = fields[6] as String?;
   }
 
   @override
   void write(BinaryWriter writer, AppointmentService obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -40,7 +41,9 @@ class AppointmentServiceAdapter extends TypeAdapter<AppointmentService> {
       ..writeByte(4)
       ..write(obj.notes)
       ..writeByte(5)
-      ..write(obj.durationOverride);
+      ..write(obj.durationOverride)
+      ..writeByte(6)
+      ..write(obj.institutionId);
   }
 
   @override

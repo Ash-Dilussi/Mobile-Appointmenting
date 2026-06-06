@@ -25,13 +25,14 @@ class ServiceAdapter extends TypeAdapter<Service> {
       ..createdAt = fields[5] as DateTime
       ..updatedAt = fields[6] as DateTime
       ..synced = fields[7] as bool
-      ..isActive = fields[8] as bool;
+      ..isActive = fields[8] as bool?
+      ..institutionId = fields[9] as String?;
   }
 
   @override
   void write(BinaryWriter writer, Service obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -49,7 +50,9 @@ class ServiceAdapter extends TypeAdapter<Service> {
       ..writeByte(7)
       ..write(obj.synced)
       ..writeByte(8)
-      ..write(obj.isActive);
+      ..write(obj.isActive)
+      ..writeByte(9)
+      ..write(obj.institutionId);
   }
 
   @override

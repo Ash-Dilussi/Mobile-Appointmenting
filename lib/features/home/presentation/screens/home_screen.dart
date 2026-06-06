@@ -13,11 +13,12 @@ import '../providers/home_provider.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
+  static final _headerDateFormat = DateFormat('EEEE, MMMM d');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
     final today = DateTime.now();
-    final dateFormat = DateFormat('EEEE, MMMM d');
 
     // Extract user name from email
     final userName = authState.user?.email.split('@').first ?? 'Receptionist';
@@ -81,7 +82,7 @@ class HomeScreen extends ConsumerWidget {
                             ),
                           ),
                           Text(
-                            dateFormat.format(today),
+                            _headerDateFormat.format(today),
                             style: AppTypography.bodyMedium.copyWith(
                               color: AppColors.secondary,
                             ),
@@ -114,7 +115,7 @@ class HomeScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: AppColors.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
                     boxShadow: [
                       BoxShadow(
@@ -165,7 +166,7 @@ class HomeScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: AppColors.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
                     boxShadow: [
                       BoxShadow(
@@ -220,6 +221,7 @@ class _UpcomingBookingsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final upcomingAppointments = ref.watch(upcomingAppointmentsProvider);
+    final hiveService = ref.watch(homeHiveProvider);
 
     return SizedBox(
       height: 200,
@@ -234,11 +236,20 @@ class _UpcomingBookingsList extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             itemCount: appointments.length,
             itemBuilder: (context, index) {
+              final apt = appointments[index];
+              final customer = hiveService.getCustomerById(apt.customerId ?? -1);
+              final service = apt.serviceId != null
+                  ? hiveService.getServiceById(apt.serviceId!)
+                  : null;
               return Padding(
                 padding: EdgeInsets.only(
                   right: index < appointments.length - 1 ? AppSpacing.md : 0,
                 ),
-                child: _BookingSquareCard(appointment: appointments[index]),
+                child: _BookingSquareCard(
+                  appointment: apt,
+                  customerName: customer?.name ?? 'Client',
+                  serviceName: service?.title ?? 'Appointment',
+                ),
               );
             },
           );
@@ -250,10 +261,19 @@ class _UpcomingBookingsList extends ConsumerWidget {
   }
 }
 
-class _BookingSquareCard extends ConsumerWidget {
+class _BookingSquareCard extends StatelessWidget {
   final Appointment appointment;
+  final String customerName;
+  final String serviceName;
 
-  const _BookingSquareCard({required this.appointment});
+  const _BookingSquareCard({
+    required this.appointment,
+    required this.customerName,
+    required this.serviceName,
+  });
+
+  static final _timeFormat = DateFormat('HH:mm');
+  static final _dateFormat = DateFormat('EEE, MMM d');
 
   Color _getPaleTimeBasedColor(DateTime time) {
     final hour = time.hour;
@@ -290,20 +310,8 @@ class _BookingSquareCard extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final timeFormat = DateFormat('HH:mm');
-    final dateFormat = DateFormat('EEE, MMM d');
+  Widget build(BuildContext context) {
     final paleColor = _getPaleTimeBasedColor(appointment.startTime);
-
-    // Look up customer and service from Hive
-    final hiveService = ref.watch(homeHiveProvider);
-    final customer = hiveService.getCustomerById(appointment.customerId ?? -1);
-    final service = appointment.serviceId != null
-        ? hiveService.getServiceById(appointment.serviceId!)
-        : null;
-
-    final customerName = customer?.name ?? 'Client';
-    final serviceName = service?.title ?? 'Appointment';
     final statusText = _getStatusText(appointment.status);
 
     return InkWell(
@@ -370,7 +378,7 @@ class _BookingSquareCard extends ConsumerWidget {
               child: Column(
                 children: [
                   Text(
-                    timeFormat.format(appointment.startTime),
+                    _timeFormat.format(appointment.startTime),
                     style: TextStyle(
                       color: AppColors.onSurface,
                       fontWeight: FontWeight.w800,
@@ -379,7 +387,7 @@ class _BookingSquareCard extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    dateFormat.format(appointment.startTime),
+                    _dateFormat.format(appointment.startTime),
                     style: AppTypography.labelSmall.copyWith(
                       color: AppColors.secondary,
                       fontSize: 10,

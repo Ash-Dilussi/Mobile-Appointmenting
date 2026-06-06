@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/auth/rbac.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../shared/widgets/info_button.dart';
+import '../../../../shared/widgets/swipe_to_delete_wrapper.dart';
+import '../../../../shared/widgets/pebble_context_menu.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class StationManagementScreen extends ConsumerWidget {
@@ -15,6 +20,8 @@ class StationManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(homeHiveProvider);
+    final authSession = ref.watch(authSessionProvider);
+    final isOwner = authSession?.role == Role.owner;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -43,7 +50,7 @@ class StationManagementScreen extends ConsumerWidget {
                   Icon(
                     Icons.location_city_outlined,
                     size: 64,
-                    color: AppColors.secondary.withOpacity(0.5),
+                    color: AppColors.secondary.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
@@ -54,7 +61,9 @@ class StationManagementScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Add your first service station to get started',
+                    isOwner
+                        ? 'Add your first service station to get started'
+                        : 'No stations available',
                     style: AppTypography.bodySmall,
                   ),
                 ],
@@ -66,141 +75,177 @@ class StationManagementScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: stations.length,
             itemBuilder: (context, index) {
-              return _StationCard(station: stations[index]);
+              return SwipeToDeleteWrapper(
+                entityName: 'Station',
+                onDelete: () async {
+                  final db = ref.read(homeHiveProvider);
+                  await db.deleteServiceStation(stations[index].id!);
+                },
+                child: _StationCard(
+                  station: stations[index],
+                  isOwner: isOwner,
+                ),
+              );
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.goNamed('add-station'),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Station'),
-      ),
+      floatingActionButton: isOwner
+          ? FloatingActionButton.extended(
+              onPressed: () => context.goNamed('add-station'),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Station'),
+            )
+          : null,
     );
   }
 }
 
-class _StationCard extends StatelessWidget {
+class _StationCard extends ConsumerWidget {
   final ServiceStation station;
+  final bool isOwner;
 
-  const _StationCard({required this.station});
+  const _StationCard({
+    required this.station,
+    required this.isOwner,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  station.name,
-                  style: AppTypography.titleMedium,
-                ),
-                if (station.address != null && station.address!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 16,
-                        color: AppColors.secondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          station.address!,
-                          style: AppTypography.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                if (station.phone != null && station.phone!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.phone,
-                        size: 16,
-                        color: AppColors.secondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        station.phone!,
-                        style: AppTypography.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
-                if (station.description != null &&
-                    station.description!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    station.description!,
-                    style: AppTypography.bodySmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.secondary),
-            onSelected: (value) => _handleAction(context, value),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit, size: 20),
-                    SizedBox(width: 8),
-                    Text('Edit'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, size: 20, color: AppColors.error),
-                    SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: AppColors.error)),
-                  ],
-                ),
-              ),
-            ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PebbleContextMenuWrapper(
+      title: station.name,
+      actions: [
+        if (isOwner) ...[
+          PebbleContextAction(
+            icon: Icons.edit,
+            label: 'Edit',
+            onTap: () {
+              context.goNamed(
+                'edit-station',
+                pathParameters: {'id': station.id.toString()},
+              );
+            },
           ),
         ],
+        if (station.address != null && station.address!.isNotEmpty)
+          PebbleContextAction(
+            icon: Icons.map,
+            label: 'View on Map',
+            onTap: () => _handleViewOnMap(context),
+          ),
+        if (station.address != null && station.address!.isNotEmpty)
+          PebbleContextAction(
+            icon: Icons.copy,
+            label: 'Copy Address',
+            onTap: () => _handleCopyAddress(context),
+          ),
+        if (isOwner)
+          PebbleContextAction(
+            icon: Icons.delete,
+            iconColor: AppColors.error,
+            label: 'Delete',
+            onTap: () => _showDeleteDialog(context, ref),
+          ),
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    station.name,
+                    style: AppTypography.titleMedium,
+                  ),
+                  if (station.address != null && station.address!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on,
+                          size: 16,
+                          color: AppColors.secondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            station.address!,
+                            style: AppTypography.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (station.phone != null && station.phone!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone,
+                          size: 16,
+                          color: AppColors.secondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          station.phone!,
+                          style: AppTypography.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (station.description != null &&
+                      station.description!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      station.description!,
+                      style: AppTypography.bodySmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            InfoButton(
+              onTap: () {
+                context.goNamed(
+                  'station-detail',
+                  pathParameters: {'id': station.id.toString()},
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _handleAction(BuildContext context, String action) {
-    switch (action) {
-      case 'edit':
-        context.goNamed(
-          'edit-station',
-          pathParameters: {'id': station.id.toString()},
-        );
-        break;
-      case 'delete':
-        _showDeleteDialog(context);
-        break;
+  void _handleViewOnMap(BuildContext context) {
+    // TODO: Implement map view using url_launcher with geo: URI
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Map view coming soon')),
+    );
+  }
+
+  void _handleCopyAddress(BuildContext context) {
+    if (station.address != null) {
+      Clipboard.setData(ClipboardData(text: station.address!));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Address copied to clipboard')),
+      );
     }
   }
 
-  void _showDeleteDialog(BuildContext context) {
+  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -216,7 +261,7 @@ class _StationCard extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              _handleDelete(context);
+              _handleDelete(context, ref);
             },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.error,
@@ -228,9 +273,9 @@ class _StationCard extends StatelessWidget {
     );
   }
 
-  void _handleDelete(BuildContext context) async {
-    final box = await Hive.openBox<ServiceStation>('serviceStations');
-    await box.delete(station.id);
+  void _handleDelete(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(homeHiveProvider);
+    await db.deleteServiceStation(station.id!);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Station deleted')),

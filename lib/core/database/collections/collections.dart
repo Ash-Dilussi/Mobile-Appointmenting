@@ -5,3 +5,6 @@ export 'call_log.dart';
 export 'sync_queue_item.dart';
 export 'service_station.dart';
 export 'appointment_service.dart';
+export 'institution.dart';
+export 'user.dart';
+export 'leave_request.dart';

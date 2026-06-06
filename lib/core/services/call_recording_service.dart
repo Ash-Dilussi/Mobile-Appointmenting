@@ -44,8 +44,8 @@ class RecordingEvent {
 /// Handles starting/stopping call recordings via native platform code.
 /// Uses device microphone with privacy notice: "Recorded for customer safety"
 class CallRecordingService {
-  static const _channel = MethodChannel('com.example.in_call_appointment_handler/recording');
-  static const _eventChannel = EventChannel('com.example.in_call_appointment_handler/recording_events');
+  static const _channel = MethodChannel('com.ashDilussi.bookly/recording');
+  static const _eventChannel = EventChannel('com.ashDilussi.bookly/recording_events');
 
   StreamSubscription<RecordingEvent>? _eventSubscription;
 

@@ -51,5 +51,18 @@
 		<string>This app records phone conversations for customer safety and appointment tracking. Recordings are stored locally and used only for generating appointment bookings.</string>
 		<key>NSPhoneUsageDescription</key>
 		<string>This app monitors call state to trigger recording and enable appointment creation from phone conversations.</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<!-- TODO: Replace with reversed client ID from GoogleService-Info.plist -->
+					<!-- Format: com.googleusercontent.apps.YOUR_CLIENT_ID -->
+					<string>109555447879692783095</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

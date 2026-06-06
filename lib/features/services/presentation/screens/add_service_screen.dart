@@ -32,8 +32,6 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
   @override
   void initState() {
     super.initState();
-    logger.info('AddServiceScreen',
-        'Screen initialized, editing: ${widget.serviceId != null}');
     if (widget.serviceId != null) {
       _isEditing = true;
       _loadService();
@@ -41,8 +39,6 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
   }
 
   Future<void> _loadService() async {
-    logger.info('AddServiceScreen',
-        'Loading service for editing, id: ${widget.serviceId}');
     final db = ref.read(homeHiveProvider);
     try {
       final service = db.getServiceById(widget.serviceId!);
@@ -54,11 +50,6 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
           _costController.text = service.cost.toString();
           _descriptionController.text = service.description ?? '';
         });
-        logger.info('AddServiceScreen',
-            'Service loaded successfully: ${service.title}');
-      } else {
-        logger.warning('AddServiceScreen',
-            'Service not found for id: ${widget.serviceId}');
       }
     } catch (e, st) {
       logger.error('AddServiceScreen', 'Failed to load service: $e',
@@ -76,9 +67,7 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
   }
 
   Future<void> _handleSave() async {
-    logger.info('AddServiceScreen', '_handleSave started');
     if (!(_formKey.currentState?.validate() ?? false)) {
-      logger.warning('AddServiceScreen', 'Form validation failed');
       return;
     }
 
@@ -86,19 +75,14 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
 
     try {
       final db = ref.read(homeHiveProvider);
-      logger.info('AddServiceScreen', 'Got database: $db');
 
       final title = _titleController.text.trim();
       final duration = int.tryParse(_durationController.text) ?? 30;
       final cost = double.tryParse(_costController.text) ?? 0.0;
       final description = _descriptionController.text.trim();
 
-      logger.info('AddServiceScreen', 'Form values - title: $title, duration: $duration, cost: $cost');
-
       if (_isEditing && _existingService != null) {
         // Update existing service
-        logger.info('AddServiceScreen',
-            'Updating service id: ${_existingService!.id}, title: $title');
         final updated = Service()
           ..title = title
           ..defaultDurationMinutes = duration
@@ -108,12 +92,8 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
           ..updatedAt = DateTime.now()
           ..synced = false;
         await db.updateService(_existingService!.id!, updated);
-        logger.info('AddServiceScreen', 'Service updated successfully: $title');
       } else {
         // Create new service
-        logger.info('AddServiceScreen',
-            'Creating new service: $title, duration: $duration min, cost: \$$cost');
-
         final newService = Service()
           ..title = title
           ..defaultDurationMinutes = duration
@@ -122,10 +102,8 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
           ..createdAt = DateTime.now()
           ..updatedAt = DateTime.now()
           ..synced = false;
-        logger.info('AddServiceScreen', 'Service object created: $newService');
 
         await db.insertService(newService);
-        logger.info('AddServiceScreen', 'Service created successfully: $title');
       }
 
       if (mounted) {
@@ -320,17 +298,12 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
 
   Future<void> _handleDelete() async {
     if (_existingService == null) {
-      logger.warning('AddServiceScreen', 'Cannot delete: no service loaded');
       return;
     }
 
-    logger.info('AddServiceScreen',
-        'Deleting service id: ${_existingService!.id}, title: ${_existingService!.title}');
     try {
       final db = ref.read(homeHiveProvider);
       await db.deleteService(_existingService!.id!);
-      logger.info('AddServiceScreen',
-          'Service deleted successfully: ${_existingService!.title}');
       if (mounted) {
         context.goNamed('service-management');
       }

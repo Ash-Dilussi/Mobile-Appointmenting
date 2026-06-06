@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/hive_service.dart';
-import '../../main.dart';
+import '../providers/hive_service_provider.dart';
 
 /// Provider for the current theme mode
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {

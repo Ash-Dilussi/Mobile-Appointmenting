@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/auth/presentation/screens/entrance_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
+import '../../features/auth/presentation/screens/create_company_placeholder_screen.dart';
+import '../../features/auth/presentation/providers/app_launch_provider.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/main_shell.dart';
 import '../../features/calendar/presentation/screens/calendar_screen.dart';
@@ -14,45 +18,63 @@ import '../../features/customers/presentation/screens/customers_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../../features/customers/presentation/screens/add_customer_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/settings/presentation/screens/profile_setup_screen.dart';
+import '../../features/settings/presentation/screens/change_password_screen.dart';
 import '../../features/services/presentation/screens/service_management_screen.dart';
 import '../../features/services/presentation/screens/add_service_screen.dart';
+import '../../features/services/presentation/screens/service_detail_screen.dart';
 import '../../features/services/presentation/screens/station_management_screen.dart';
 import '../../features/services/presentation/screens/add_station_screen.dart';
+import '../../features/services/presentation/screens/station_detail_screen.dart';
+import '../../features/settings/presentation/screens/staff_management_screen.dart';
+import '../../features/settings/presentation/screens/edit_company_screen.dart';
+import '../../features/settings/presentation/screens/operator_profile_screen.dart';
+import '../../features/settings/presentation/screens/leave_requests_screen.dart';
+import '../../features/settings/presentation/screens/create_company_screen.dart';
 import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/booking/presentation/screens/booking_confirmation_screen.dart';
 import '../../features/booking/presentation/screens/appointment_detail_screen.dart';
-import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/calendar/presentation/screens/full_calendar_screen.dart';
 
 // Navigation shell key
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
+// Helper function for safe int parsing
+int? _parseId(String? value) => value != null ? int.tryParse(value) : null;
+
 // Router provider
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  // Watch appLaunchProvider to trigger redirects when auth state changes
+  ref.watch(appLaunchProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/login',
+    initialLocation: '/splash',
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      final isLoggedIn = authState.status == AuthStatus.authenticated;
-      final isAuthRoute = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register' ||
-          state.matchedLocation == '/forgot-password' ||
-          state.matchedLocation == '/reset-password';
+      final loc = state.matchedLocation;
 
-      if (!isLoggedIn && !isAuthRoute) {
-        return '/login';
+      // Mid-session sign-out redirect handled by auth state
+      // The splash screen handles cold-start routing via AppLaunchState
+      switch (loc) {
+        case '/entrance':
+        case '/splash':
+          return null;
+        default:
+          return null;
       }
-
-      if (isLoggedIn && isAuthRoute) {
-        return '/home';
-      }
-
-      return null;
     },
     routes: [
+      // Entrance screen route
+      GoRoute(
+        path: '/entrance',
+        name: 'entrance',
+        builder: (context, state) {
+          final launchState = state.extra as AppLaunchState;
+          return EntranceScreen(launchState: launchState);
+        },
+      ),
       // Auth routes
       GoRoute(
         path: '/login',
@@ -76,6 +98,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           final email = state.uri.queryParameters['email'];
           return ResetPasswordScreen(resetEmail: email);
         },
+      ),
+
+      // Splash screen route
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+
+      // Create company route (for new users)
+      GoRoute(
+        path: '/create-company',
+        name: 'create-company-placeholder',
+        builder: (context, state) => const CreateCompanyPlaceholderScreen(),
       ),
 
       // Main app shell with bottom navigation
@@ -144,7 +180,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customers/edit/:id',
         name: 'edit-customer',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return AddCustomerScreen(customerId: id);
         },
       ),
@@ -152,7 +189,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/:id',
         name: 'customer-profile',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return CustomerProfileScreen(customerId: id);
         },
       ),
@@ -170,8 +208,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/services/edit/:id',
         name: 'edit-service',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return AddServiceScreen(serviceId: id);
+        },
+      ),
+      GoRoute(
+        path: '/services/detail/:id',
+        name: 'service-detail',
+        builder: (context, state) {
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
+          return ServiceDetailScreen(serviceId: id);
         },
       ),
       GoRoute(
@@ -188,9 +236,47 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/stations/edit/:id',
         name: 'edit-station',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return AddStationScreen(stationId: id);
         },
+      ),
+      GoRoute(
+        path: '/stations/detail/:id',
+        name: 'station-detail',
+        builder: (context, state) {
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
+          return StationDetailScreen(stationId: id);
+        },
+      ),
+      GoRoute(
+        path: '/staff',
+        name: 'staff-management',
+        builder: (context, state) => const StaffManagementScreen(),
+      ),
+      GoRoute(
+        path: '/company/edit',
+        name: 'edit-company',
+        builder: (context, state) => const EditCompanyScreen(),
+      ),
+      GoRoute(
+        path: '/company/create',
+        name: 'create-company',
+        builder: (context, state) => const CreateCompanyScreen(),
+      ),
+      GoRoute(
+        path: '/operator/:id',
+        name: 'operator-profile',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return OperatorProfileScreen(operatorId: id);
+        },
+      ),
+      GoRoute(
+        path: '/leave-requests',
+        name: 'leave-requests',
+        builder: (context, state) => const LeaveRequestsScreen(),
       ),
       GoRoute(
         path: '/booking',
@@ -210,7 +296,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/booking/confirmation/:appointmentId',
         name: 'booking-confirmation',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['appointmentId']!);
+          final id = _parseId(state.pathParameters['appointmentId']);
+          if (id == null) return const SizedBox();
           return BookingConfirmationScreen(appointmentId: id);
         },
       ),
@@ -218,7 +305,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/appointment/:id',
         name: 'appointment-detail',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return AppointmentDetailScreen(appointmentId: id);
         },
       ),
@@ -226,8 +314,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/booking/edit/:id',
         name: 'booking-edit',
         builder: (context, state) {
-          final id = int.parse(state.pathParameters['id']!);
+          final id = _parseId(state.pathParameters['id']);
+          if (id == null) return const SizedBox();
           return BookingScreen(appointmentId: id);
+        },
+      ),
+      GoRoute(
+        path: '/profile-setup',
+        name: 'profile-setup',
+        builder: (context, state) => const ProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        name: 'change-password',
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/calendar/full',
+        name: 'full-calendar',
+        builder: (context, state) {
+          final dateStr = state.uri.queryParameters['date'];
+          final date = dateStr != null
+              ? DateTime.tryParse(dateStr) ?? DateTime.now()
+              : DateTime.now();
+          return FullCalendarScreen(initialDate: date);
         },
       ),
     ],

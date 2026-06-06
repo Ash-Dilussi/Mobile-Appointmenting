@@ -22,5 +22,8 @@ class AppointmentService extends HiveObject {
   @HiveField(5)
   int? durationOverride;
 
+  @HiveField(6)
+  String? institutionId;
+
   AppointmentService();
 }

@@ -7,6 +7,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../shared/widgets/info_button.dart';
+import '../../../../shared/widgets/swipe_to_delete_wrapper.dart';
+import '../../../../shared/widgets/pebble_context_menu.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class ServiceManagementScreen extends ConsumerWidget {
@@ -43,7 +46,7 @@ class ServiceManagementScreen extends ConsumerWidget {
                   Icon(
                     Icons.miscellaneous_services_outlined,
                     size: 64,
-                    color: AppColors.secondary.withOpacity(0.5),
+                    color: AppColors.secondary.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
@@ -66,7 +69,14 @@ class ServiceManagementScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: services.length,
             itemBuilder: (context, index) {
-              return _ServiceCard(service: services[index]);
+              return SwipeToDeleteWrapper(
+                entityName: 'Service',
+                onDelete: () async {
+                  final db = ref.read(homeHiveProvider);
+                  await db.softDeleteService(services[index].id!);
+                },
+                child: _ServiceCard(service: services[index]),
+              );
             },
           );
         },
@@ -89,103 +99,142 @@ class _ServiceCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currencyFormat = NumberFormat.currency(symbol: '\$');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  service.title,
-                  style: AppTypography.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule,
-                      size: 16,
-                      color: AppColors.secondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${service.defaultDurationMinutes} min',
-                      style: AppTypography.bodySmall,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Icon(
-                      Icons.attach_money,
-                      size: 16,
-                      color: AppColors.secondary,
-                    ),
-                    Text(
-                      currencyFormat.format(service.cost),
-                      style: AppTypography.bodySmall,
-                    ),
-                  ],
-                ),
-                if (service.description != null &&
-                    service.description!.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.sm),
+    return PebbleContextMenuWrapper(
+      title: service.title,
+      actions: [
+        PebbleContextAction(
+          icon: Icons.edit,
+          label: 'Edit',
+          onTap: () {
+            context.goNamed(
+              'edit-service',
+              pathParameters: {'id': service.id.toString()},
+            );
+          },
+        ),
+        PebbleContextAction(
+          icon: Icons.copy,
+          label: 'Duplicate Service',
+          onTap: () => _handleDuplicate(context, ref),
+        ),
+        PebbleContextAction(
+          icon: service.isActive == false ? Icons.check_circle : Icons.hide_source,
+          label: service.isActive == false ? 'Activate' : 'Deactivate',
+          onTap: () => _handleToggleActive(context, ref),
+        ),
+        PebbleContextAction(
+          icon: Icons.delete,
+          iconColor: AppColors.error,
+          label: 'Delete',
+          onTap: () => _showDeleteDialog(context, ref),
+        ),
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    service.description!,
-                    style: AppTypography.bodySmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    service.title,
+                    style: AppTypography.titleMedium,
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        size: 16,
+                        color: AppColors.secondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${service.defaultDurationMinutes} min',
+                        style: AppTypography.bodySmall,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Icon(
+                        Icons.attach_money,
+                        size: 16,
+                        color: AppColors.secondary,
+                      ),
+                      Text(
+                        currencyFormat.format(service.cost),
+                        style: AppTypography.bodySmall,
+                      ),
+                    ],
+                  ),
+                  if (service.description != null &&
+                      service.description!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      service.description!,
+                      style: AppTypography.bodySmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.secondary),
-            onSelected: (value) => _handleAction(context, value, ref),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit, size: 20),
-                    SizedBox(width: 8),
-                    Text('Edit'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, size: 20, color: AppColors.error),
-                    SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: AppColors.error)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
+            InfoButton(
+              onTap: () {
+                context.goNamed(
+                  'service-detail',
+                  pathParameters: {'id': service.id.toString()},
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _handleAction(BuildContext context, String action, WidgetRef ref) {
-    switch (action) {
-      case 'edit':
-        context.goNamed(
-          'edit-service',
-          pathParameters: {'id': service.id.toString()},
-        );
-        break;
-      case 'delete':
-        _showDeleteDialog(context, ref);
-        break;
+  void _handleDuplicate(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(homeHiveProvider);
+    final duplicate = Service()
+      ..title = '${service.title} (Copy)'
+      ..defaultDurationMinutes = service.defaultDurationMinutes
+      ..cost = service.cost
+      ..description = service.description
+      ..createdAt = DateTime.now()
+      ..updatedAt = DateTime.now()
+      ..synced = false
+      ..isActive = true;
+    await db.insertService(duplicate);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Service duplicated')),
+      );
+    }
+  }
+
+  void _handleToggleActive(BuildContext context, WidgetRef ref) async {
+    final db = ref.read(homeHiveProvider);
+    final updated = Service()
+      ..title = service.title
+      ..defaultDurationMinutes = service.defaultDurationMinutes
+      ..cost = service.cost
+      ..description = service.description
+      ..createdAt = service.createdAt
+      ..updatedAt = DateTime.now()
+      ..synced = false
+      ..isActive = service.isActive == false; // Toggle
+    await db.updateService(service.id!, updated);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(service.isActive == false ? 'Service activated' : 'Service deactivated'),
+        ),
+      );
     }
   }
 

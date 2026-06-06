@@ -3,27 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
-import 'core/database/hive_service.dart';
 import 'core/logging/logger_service.dart';
-import 'seed_dummy_data.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize logger first
+  // logger must be ready before any error hooks
   await logger.init();
-  await logger.info('main', 'Application starting...');
+  logger.info('Startup', 'Logger initialized');
 
-  // Set preferred orientations
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
-  // Clean old logs (keep last 7 days)
-  await logger.cleanOldLogs(keepDays: 7);
-
-  // Set up global error handlers
+  // Error hook needs logger; set before runApp
   FlutterError.onError = (details) {
     logger.error(
       'FlutterError',
@@ -34,7 +23,13 @@ void main() async {
     FlutterError.presentError(details);
   };
 
-  // Set system UI overlay style
+  // Must precede first frame to avoid orientation flicker
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Must precede first frame to avoid status bar flicker
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -44,26 +39,12 @@ void main() async {
     ),
   );
 
-  // Initialize database
-  logger.info('main', 'Initializing Hive database...');
-  final hiveService = HiveService();
-  await hiveService.init();
+  logger.info('Startup', 'Calling runApp — heavy init moves to AppInitNotifier');
 
-  // Seed dummy data for testing (force: true to always reseed fresh)
-  await seedDummyData(hiveService, force: true);
-
-  logger.info('main', 'Starting app...');
+  // runApp called with NO Firebase/Hive/seed awaits above
   runApp(
-    ProviderScope(
-      overrides: [
-        hiveServiceProvider.overrideWithValue(hiveService),
-      ],
-      child: const App(),
+    const ProviderScope(
+      child: App(),
     ),
   );
 }
-
-// Hive service provider
-final hiveServiceProvider = Provider<HiveService>((ref) {
-  throw UnimplementedError('HiveService must be overridden in main.dart');
-});

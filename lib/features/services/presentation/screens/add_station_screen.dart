@@ -31,8 +31,6 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
   @override
   void initState() {
     super.initState();
-    logger.info('AddStationScreen',
-        'Screen initialized, editing: ${widget.stationId != null}');
     if (widget.stationId != null) {
       _isEditing = true;
       _loadStation();
@@ -40,8 +38,6 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
   }
 
   Future<void> _loadStation() async {
-    logger.info('AddStationScreen',
-        'Loading station for editing, id: ${widget.stationId}');
     final db = ref.read(homeHiveProvider);
     try {
       final station = db.getServiceStationById(widget.stationId!);
@@ -53,11 +49,6 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
           _phoneController.text = station.phone ?? '';
           _descriptionController.text = station.description ?? '';
         });
-        logger.info(
-            'AddStationScreen', 'Station loaded successfully: ${station.name}');
-      } else {
-        logger.warning('AddStationScreen',
-            'Station not found for id: ${widget.stationId}');
       }
     } catch (e, st) {
       logger.error('AddStationScreen', 'Failed to load station: $e',
@@ -75,9 +66,7 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
   }
 
   Future<void> _handleSave() async {
-    logger.info('AddStationScreen', '_handleSave started');
     if (!(_formKey.currentState?.validate() ?? false)) {
-      logger.warning('AddStationScreen', 'Form validation failed');
       return;
     }
 
@@ -85,18 +74,13 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
 
     try {
       final db = ref.read(homeHiveProvider);
-      logger.info('AddStationScreen', 'Got database: $db');
 
       final name = _nameController.text.trim();
       final address = _addressController.text.trim();
       final phone = _phoneController.text.trim();
       final description = _descriptionController.text.trim();
 
-      logger.info('AddStationScreen', 'Form values - name: $name');
-
       if (_isEditing && _existingStation != null) {
-        logger.info('AddStationScreen',
-            'Updating station id: ${_existingStation!.id}, name: $name');
         final updated = ServiceStation()
           ..name = name
           ..address = address.isNotEmpty ? address : null
@@ -106,9 +90,7 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
           ..updatedAt = DateTime.now()
           ..synced = false;
         await db.updateServiceStation(_existingStation!.id!, updated);
-        logger.info('AddStationScreen', 'Station updated successfully: $name');
       } else {
-        logger.info('AddStationScreen', 'Creating new station: $name');
 
         final newStation = ServiceStation()
           ..name = name
@@ -118,10 +100,7 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
           ..createdAt = DateTime.now()
           ..updatedAt = DateTime.now()
           ..synced = false;
-        logger.info('AddStationScreen', 'Station object created: $newStation');
-
         await db.insertServiceStation(newStation);
-        logger.info('AddStationScreen', 'Station created successfully: $name');
       }
 
       if (mounted) {
@@ -147,17 +126,12 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
 
   Future<void> _handleDelete() async {
     if (_existingStation == null) {
-      logger.warning('AddStationScreen', 'Cannot delete: no station loaded');
       return;
     }
 
-    logger.info('AddStationScreen',
-        'Deleting station id: ${_existingStation!.id}, name: ${_existingStation!.name}');
     try {
       final db = ref.read(homeHiveProvider);
       await db.deleteServiceStation(_existingStation!.id!);
-      logger.info('AddStationScreen',
-          'Station deleted successfully: ${_existingStation!.name}');
       if (mounted) {
         context.goNamed('station-management');
       }

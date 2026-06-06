@@ -112,7 +112,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       }
 
       if (mounted) {
-        context.pop();
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.goNamed('customers');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -137,7 +141,13 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => GoRouter.of(context).pop(),
+          onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.goNamed('customers');
+          }
+        },
         ),
         title: Text(widget.isEditMode ? 'Edit Customer' : 'Add Customer'),
         centerTitle: true,

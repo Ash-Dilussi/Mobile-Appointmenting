@@ -9,6 +9,9 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../../../core/auth/rbac.dart';
+import '../../../../core/providers/auth_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -18,6 +21,23 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _hasNoCompany = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkCompanyStatus();
+    });
+  }
+
+  void _checkCompanyStatus() {
+    final session = ref.read(authSessionProvider);
+    setState(() {
+      _hasNoCompany = session?.institutionId == null && session?.role == Role.owner;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,7 +66,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'Profile',
                   subtitle: 'Manage your account details',
                   onTap: () {
-                    // TODO: Navigate to profile
+                    context.goNamed('profile-setup');
                   },
                 ),
                 _SettingsTile(
@@ -54,7 +74,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'Change Password',
                   subtitle: 'Update your password',
                   onTap: () {
-                    // TODO: Navigate to change password
+                    context.goNamed('change-password');
                   },
                 ),
               ],
@@ -91,6 +111,64 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             const SizedBox(height: AppSpacing.xl),
 
+            // Calendar Integration Section
+            Text(
+              'Calendar Integration',
+              style: AppTypography.titleSmall.copyWith(
+                color: AppColors.secondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _SettingsCard(
+              children: [
+                Consumer(builder: (context, ref, _) {
+                  final authService = ref.watch(googleAuthServiceProvider);
+                  final isSignedIn = authService.isSignedIn;
+                  return _SettingsTile(
+                    icon: Icons.calendar_month_rounded,
+                    title: 'Google Calendar',
+                    subtitle: isSignedIn
+                        ? '${authService.currentUser?.email}'
+                        : 'Sign in to sync appointments',
+                    onTap: () async {
+                      if (isSignedIn) {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Sign Out'),
+                            content: const Text(
+                                'Are you sure you want to sign out from Google Calendar?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Sign Out'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await authService.signOut();
+                        }
+                      } else {
+                        final account = await authService.signIn();
+                        if (account == null && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Sign in cancelled')),
+                          );
+                        }
+                      }
+                    },
+                  );
+                }),
+              ],
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
+
             // Business Management Section
             Text(
               'Business Management',
@@ -101,30 +179,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: AppSpacing.md),
             _SettingsCard(
               children: [
-                _SettingsTile(
-                  icon: Icons.miscellaneous_services_outlined,
-                  title: 'Manage Services',
-                  subtitle: 'Add, edit, or remove services',
-                  onTap: () {
-                    context.goNamed('service-management');
-                  },
-                ),
-                _SettingsTile(
-                  icon: Icons.location_city_outlined,
-                  title: 'Manage Stations',
-                  subtitle: 'Add, edit, or remove service stations',
-                  onTap: () {
-                    context.goNamed('station-management');
-                  },
-                ),
-                _SettingsTile(
-                  icon: Icons.people_outline,
-                  title: 'Staff Management',
-                  subtitle: 'Manage staff members',
-                  onTap: () {
-                    // TODO: Navigate to staff management
-                  },
-                ),
+                if (_hasNoCompany) ...[
+                  _SettingsTile(
+                    icon: Icons.business,
+                    title: 'Create Company',
+                    subtitle: 'Set up your company to get started',
+                    onTap: () {
+                      context.goNamed('create-company');
+                    },
+                  ),
+                ] else ...[
+                  _SettingsTile(
+                    icon: Icons.miscellaneous_services_outlined,
+                    title: 'Manage Services',
+                    subtitle: 'Add, edit, or remove services',
+                    onTap: () {
+                      context.goNamed('service-management');
+                    },
+                  ),
+                  _SettingsTile(
+                    icon: Icons.location_city_outlined,
+                    title: 'Manage Stations',
+                    subtitle: 'Add, edit, or remove service stations',
+                    onTap: () {
+                      context.goNamed('station-management');
+                    },
+                  ),
+                  _SettingsTile(
+                    icon: Icons.people_outline,
+                    title: 'Staff Management',
+                    subtitle: 'Manage staff members',
+                    onTap: () {
+                      context.goNamed('staff-management');
+                    },
+                  ),
+                ],
               ],
             ),
 

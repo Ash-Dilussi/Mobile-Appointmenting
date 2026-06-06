@@ -3,7 +3,6 @@
 /// Usage: dart run scripts/end_day.dart
 
 import 'package:hive/hive.dart';
-import 'package:intl/intl.dart';
 
 Future<void> main() async {
   final homeDir = r'd:\Projects\Vibe test\Mobile Appointmenting';
@@ -13,7 +12,6 @@ Future<void> main() async {
   final box = await Hive.openBox('Appointment');
 
   final now = DateTime.now();
-  final todayStr = DateFormat('yyyy-MM-dd').format(now);
 
   int count = 0;
   for (var i = 0; i < box.length; i++) {

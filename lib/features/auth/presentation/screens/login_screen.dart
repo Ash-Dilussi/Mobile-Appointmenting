@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/theme/app_typography.dart';
-import '../providers/auth_provider.dart';
+import '../../../../core/constants/auth_error_messages.dart';
+import '../providers/auth_notifier.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -27,25 +26,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleSignIn() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      await ref.read(authStateProvider.notifier).signInWithEmail(
-            _emailController.text.trim(),
-            _passwordController.text,
-          );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
+    final authState = ref.watch(authNotifierProvider);
+    final notifier = ref.read(authNotifierProvider.notifier);
 
-    ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.status == AuthStatus.unauthenticated && next.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
+    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+      if (next.status == AuthStatus.error && next.errorCode != null) {
+        // DEBUG: Log the actual error code
+        debugPrint('DEBUG Auth Error: errorCode=${next.errorCode}');
+
+        // User-not-found dialog — friendly prompt to create account
+        if (next.errorCode == 'user-not-found') {
+          notifier.clearError();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) _showNewUserDialog(context);
+          });
+          return;
+        }
+
+        // Generic error banner
+        ScaffoldMessenger.of(context).showMaterialBanner(
+          MaterialBanner(
+            content: Text(authErrorMessage(next.errorCode)),
             backgroundColor: AppColors.error,
+            actions: [
+              TextButton(
+                onPressed: () => notifier.clearError(),
+                child: const Text('Dismiss'),
+              ),
+            ],
           ),
         );
       }
@@ -61,52 +71,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppSpacing.xxxl),
-
-                // Logo and Title
-                Center(
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-                    ),
-                    child: const Icon(
-                      Icons.phone_in_talk_rounded,
-                      size: 40,
-                      color: AppColors.onPrimaryContainer,
-                    ),
-                  ),
+                const SizedBox(height: 60),
+                Icon(
+                  Icons.business_center,
+                  size: 80,
+                  color: AppColors.primary,
                 ),
-
-                const SizedBox(height: AppSpacing.xl),
-
+                const SizedBox(height: AppSpacing.lg),
                 Text(
-                  'In-Call',
-                  style: AppTypography.displaySmall.copyWith(
-                    color: AppColors.primary,
+                  'Welcome Back',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Appointment Handler',
-                  style: AppTypography.headlineMedium.copyWith(
+                  'Sign in to continue',
+                  style: TextStyle(
+                    fontSize: 16,
                     color: AppColors.secondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
-
                 const SizedBox(height: AppSpacing.xxxl),
-
-                // Email field
+                if (authState.isLoading) const LinearProgressIndicator(),
+                const SizedBox(height: AppSpacing.lg),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
                   decoration: const InputDecoration(
                     labelText: 'Email',
-                    hintText: 'Enter your email',
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (value) {
@@ -119,18 +118,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     return null;
                   },
                 ),
-
                 const SizedBox(height: AppSpacing.lg),
-
-                // Password field
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _handleSignIn(),
+                  autofillHints: const [AutofillHints.password],
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    hintText: 'Enter your password',
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -139,9 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             : Icons.visibility_off_outlined,
                       ),
                       onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
+                        setState(() => _obscurePassword = !_obscurePassword);
                       },
                     ),
                   ),
@@ -149,98 +142,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
                     }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
                     return null;
                   },
                 ),
-
-                const SizedBox(height: AppSpacing.sm),
-
-                // Forgot password
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => context.goNamed('forgot-password'),
-                    child: Text(
-                      'Forgot Password?',
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: AppSpacing.xl),
-
-                // Sign In button
+                const SizedBox(height: AppSpacing.xxl),
                 FilledButton(
-                  onPressed: authState.status == AuthStatus.loading
+                  onPressed: authState.isLoading
                       ? null
-                      : _handleSignIn,
-                  child: authState.status == AuthStatus.loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.onPrimaryContainer,
-                          ),
-                        )
-                      : const Text('Sign In'),
+                      : () {
+                          if (_formKey.currentState?.validate() ?? false) {
+                            notifier.signInWithEmail(
+                              _emailController.text.trim(),
+                              _passwordController.text,
+                            );
+                          }
+                        },
+                  child: const Text('Sign In'),
                 ),
-
                 const SizedBox(height: AppSpacing.lg),
-
-                // Divider
                 Row(
                   children: [
-                    Expanded(child: Divider(color: AppColors.outline.withOpacity(0.3))),
+                    const Expanded(child: Divider()),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                       child: Text(
-                        'or',
-                        style: AppTypography.bodySmall,
+                        'OR',
+                        style: TextStyle(color: AppColors.secondary),
                       ),
                     ),
-                    Expanded(child: Divider(color: AppColors.outline.withOpacity(0.3))),
+                    const Expanded(child: Divider()),
                   ],
                 ),
-
                 const SizedBox(height: AppSpacing.lg),
-
-                // Google Sign In
                 OutlinedButton.icon(
-                  onPressed: () {
-                    ref.read(authStateProvider.notifier).signInWithGoogle();
-                  },
-                  icon: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Icon(Icons.g_mobiledata, size: 24),
+                  onPressed: authState.isLoading
+                      ? null
+                      : () => notifier.signInWithGoogle(),
+                  icon: const Icon(
+                    Icons.g_mobiledata,
+                    size: 20,
                   ),
-                  label: const Text('Sign in with Google'),
+                  label: const Text('Continue with Google'),
                 ),
-
-                const SizedBox(height: AppSpacing.xxl),
-
-                // Register link
+                const SizedBox(height: AppSpacing.xl),
+                TextButton(
+                  onPressed: () => context.go('/forgot-password'),
+                  child: const Text("Forgot Password?"),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Don't have an account?",
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.secondary,
-                      ),
+                      "Don't have an account? ",
+                      style: TextStyle(color: AppColors.secondary),
                     ),
                     TextButton(
-                      onPressed: () => context.goNamed('register'),
-                      child: const Text('Sign Up'),
+                      onPressed: () => context.go('/register'),
+                      child: const Text('Register'),
                     ),
                   ],
                 ),
@@ -249,6 +209,100 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Shows a friendly bottom sheet when the entered email has no registered account.
+  void _showNewUserDialog(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          margin: const EdgeInsets.only(top: 80),
+          decoration: BoxDecoration(
+            color: Theme.of(sheetContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Drag handle
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.person_search_rounded,
+                    size: 64,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'Are you new here?',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheetContext)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9999),
+                          ),
+                          minimumSize: const Size(100, 52),
+                        ),
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          context.go('/register');
+                        },
+                        child: const Text('Create Account'),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: AppColors.primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9999),
+                          ),
+                          minimumSize: const Size(100, 52),
+                        ),
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

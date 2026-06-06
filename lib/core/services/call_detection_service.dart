@@ -17,8 +17,8 @@ class ActiveCallState {
 
 /// Call detection service for Android native call detection
 class CallDetectionService {
-  static const _methodChannel = MethodChannel('com.example.in_call_appointment_handler/call_detection');
-  static const _eventChannel = EventChannel('com.example.in_call_appointment_handler/call_events');
+  static const _methodChannel = MethodChannel('com.ashDilussi.bookly/call_detection');
+  static const _eventChannel = EventChannel('com.ashDilussi.bookly/call_events');
 
   Stream<Map<String, dynamic>>? _callEventStream;
 

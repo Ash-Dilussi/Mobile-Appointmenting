@@ -491,7 +491,7 @@ void main() {
         ..retryCount = 0;
 
       final key = await hiveService.insertSyncItem(syncItem);
-      await hiveService.deleteSyncItem(key!);
+      await hiveService.deleteSyncItem(key);
 
       final items = hiveService.getPendingSyncItems();
       expect(items.any((i) => i.id == key), isFalse);

@@ -47,11 +47,17 @@ class MainShell extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
+          border: Border(
+            top: BorderSide(
+              color: AppColors.outline.withValues(alpha: 0.2),
+              width: 0.5,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.onSurface.withOpacity(0.06),
-              blurRadius: 24,
-              offset: const Offset(0, -12),
+              color: AppColors.onSurface.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
             ),
           ],
         ),
@@ -129,9 +135,7 @@ class _NavItem extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primaryContainer.withOpacity(0.2)
-              : Colors.transparent,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(

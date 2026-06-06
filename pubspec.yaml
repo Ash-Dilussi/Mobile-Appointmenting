@@ -36,12 +36,23 @@ dependencies:
   json_annotation: ^4.9.0
   url_launcher: ^6.3.0
 
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+
+  # Google Calendar integration
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
+  http: ^1.2.0
+
   # Table Calendar for Calendar View
   table_calendar: ^3.1.1
 
   # Call Recording & Speech
   permission_handler: ^11.3.1
-  speech_to_text: ^6.6.0
+  # speech_to_text: ^7.0.0  # TEMPORARILY DISABLED - causes Kotlin daemon crash on paths with spaces
 
   # Splash Screen
   flutter_native_splash: ^2.4.0
@@ -50,7 +61,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  mocktail: ^1.0.0
+  mocktail: ^1.0.4
 
   # Code Generation
   build_runner: ^2.4.11

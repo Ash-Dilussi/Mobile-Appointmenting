@@ -67,224 +67,252 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         title: const Text('Calendar'),
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          // Calendar Widget
-          Container(
-            margin: const EdgeInsets.all(AppSpacing.md),
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-            ),
-            child: busyDaysAsync.when(
-              data: (busyDays) => TableCalendar(
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                calendarFormat: _calendarFormat,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                onFormatChanged: (format) {
-                  setState(() {
-                    _calendarFormat = format;
-                  });
-                },
-                onPageChanged: (focusedDay) {
-                  _focusedDay = focusedDay;
-                },
-                calendarBuilders: CalendarBuilders(
-                  markerBuilder: (context, date, events) {
-                    final dayKey = DateTime(date.year, date.month, date.day);
-                    final level = busyDays[dayKey] ?? 0.0;
-                    if (level == 0) return null;
-                    return Positioned(
-                      bottom: 1,
-                      child: Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: _getBusyColor(level),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    );
-                  },
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Calendar Widget
+              Container(
+                margin: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
                 ),
-                calendarStyle: CalendarStyle(
-                  todayDecoration: BoxDecoration(
-                    color: AppColors.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  todayTextStyle: AppTypography.bodyLarge.copyWith(
-                    color: AppColors.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  selectedDecoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  selectedTextStyle: AppTypography.bodyLarge.copyWith(
-                    color: AppColors.onPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  defaultTextStyle: AppTypography.bodyMedium,
-                  weekendTextStyle: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.secondary,
-                  ),
-                  outsideTextStyle: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.outline,
-                  ),
-                  markerDecoration: const BoxDecoration(
-                    color: AppColors.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  markersMaxCount: 3,
-                  markerSize: 6,
-                  markerMargin: const EdgeInsets.symmetric(horizontal: 1),
-                ),
-                headerStyle: HeaderStyle(
-                  formatButtonVisible: true,
-                  titleCentered: true,
-                  formatButtonDecoration: BoxDecoration(
-                    color: AppColors.primaryContainer.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                  ),
-                  formatButtonTextStyle: AppTypography.labelMedium.copyWith(
-                    color: AppColors.primary,
-                  ),
-                  titleTextStyle: AppTypography.titleLarge,
-                  leftChevronIcon: const Icon(
-                    Icons.chevron_left,
-                    color: AppColors.onSurface,
-                  ),
-                  rightChevronIcon: const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                daysOfWeekStyle: DaysOfWeekStyle(
-                  weekdayStyle: AppTypography.labelMedium.copyWith(
-                    color: AppColors.secondary,
-                  ),
-                  weekendStyle: AppTypography.labelMedium.copyWith(
-                    color: AppColors.secondary,
-                  ),
-                ),
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(child: Text('Error: $err')),
-            ),
-          ),
-
-          // Selected Day Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _selectedDay != null
-                      ? DateFormat('EEEE, MMM d').format(_selectedDay!)
-                      : 'Select a day',
-                  style: AppTypography.titleMedium,
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _selectedDay = DateTime.now();
-                      _focusedDay = DateTime.now();
-                    });
-                  },
-                  icon: const Icon(Icons.today, size: 18),
-                  label: const Text('Today'),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppSpacing.md),
-
-          // Appointments List
-          Expanded(
-            child: _selectedDay != null
-                ? StreamBuilder<List<Appointment>>(
-                    stream: db.watchAppointmentsForDate(_selectedDay!),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      final appointments = snapshot.data ?? [];
-
-                      if (appointments.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.event_available_outlined,
-                                size: 48,
-                                color: AppColors.secondary.withOpacity(0.5),
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              Text(
-                                'No appointments for this day',
-                                style: AppTypography.bodyMedium.copyWith(
-                                  color: AppColors.secondary,
-                                ),
-                              ),
-                            ],
+                child: busyDaysAsync.when(
+                  data: (busyDays) => TableCalendar(
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    onFormatChanged: (format) {
+                      setState(() {
+                        _calendarFormat = format;
+                      });
+                    },
+                    onPageChanged: (focusedDay) {
+                      _focusedDay = focusedDay;
+                    },
+                    calendarBuilders: CalendarBuilders(
+                      markerBuilder: (context, date, events) {
+                        final dayKey = DateTime(date.year, date.month, date.day);
+                        final level = busyDays[dayKey] ?? 0.0;
+                        if (level == 0) return null;
+                        return Positioned(
+                          bottom: 1,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _getBusyColor(level),
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg,
-                        ),
-                        itemCount: appointments.length,
-                        itemBuilder: (context, index) {
-                          return InkWell(
-                            onTap: appointments[index].id != null
-                                ? () {
-                                    context.goNamed(
-                                      'appointment-detail',
-                                      pathParameters: {'id': appointments[index].id.toString()},
-                                    );
-                                  }
-                                : null,
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                            child: _CalendarAppointmentCard(
-                              appointment: appointments[index],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  )
-                : const Center(
-                    child: Text('Select a day to view appointments'),
+                      },
+                    ),
+                    calendarStyle: CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      todayTextStyle: AppTypography.bodyLarge.copyWith(
+                        color: AppColors.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      selectedDecoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      selectedTextStyle: AppTypography.bodyLarge.copyWith(
+                        color: AppColors.onPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      defaultTextStyle: AppTypography.bodyMedium,
+                      weekendTextStyle: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.secondary,
+                      ),
+                      outsideTextStyle: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.outline,
+                      ),
+                      markerDecoration: const BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      markersMaxCount: 3,
+                      markerSize: 6,
+                      markerMargin: const EdgeInsets.symmetric(horizontal: 1),
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: true,
+                      titleCentered: true,
+                      formatButtonDecoration: BoxDecoration(
+                        color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      ),
+                      formatButtonTextStyle: AppTypography.labelMedium.copyWith(
+                        color: AppColors.primary,
+                      ),
+                      titleTextStyle: AppTypography.titleLarge,
+                      leftChevronIcon: const Icon(
+                        Icons.chevron_left,
+                        color: AppColors.onSurface,
+                      ),
+                      rightChevronIcon: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    daysOfWeekStyle: DaysOfWeekStyle(
+                      weekdayStyle: AppTypography.labelMedium.copyWith(
+                        color: AppColors.secondary,
+                      ),
+                      weekendStyle: AppTypography.labelMedium.copyWith(
+                        color: AppColors.secondary,
+                      ),
+                    ),
                   ),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => Center(child: Text('Error: $err')),
+                ),
+              ),
+
+              // Selected Day Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedDay != null
+                          ? DateFormat('EEEE, MMM d').format(_selectedDay!)
+                          : 'Select a day',
+                      style: AppTypography.titleMedium,
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _selectedDay = DateTime.now();
+                          _focusedDay = DateTime.now();
+                        });
+                      },
+                      icon: const Icon(Icons.today, size: 18),
+                      label: const Text('Today'),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.md),
+
+              // Appointments List
+              if (_selectedDay != null)
+                StreamBuilder<List<Appointment>>(
+                  stream: db.watchAppointmentsForDate(_selectedDay!),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final appointments = snapshot.data ?? [];
+
+                    if (appointments.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.event_available_outlined,
+                              size: 48,
+                              color: AppColors.secondary.withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              'No appointments for this day',
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                      ),
+                      itemCount: appointments.length,
+                      itemBuilder: (context, index) {
+                        return InkWell(
+                          onTap: appointments[index].id != null
+                              ? () {
+                                  context.goNamed(
+                                    'appointment-detail',
+                                    pathParameters: {'id': appointments[index].id.toString()},
+                                  );
+                                }
+                              : null,
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                          child: _CalendarAppointmentCard(
+                            appointment: appointments[index],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                )
+              else
+                const Center(
+                  child: Text('Select a day to view appointments'),
+                ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Second FAB - Full Hourly View
+          FloatingActionButton.small(
+            heroTag: 'hourly_view',
+            onPressed: () {
+              final dateStr = _selectedDay != null
+                  ? '${_selectedDay!.year}-${_selectedDay!.month.toString().padLeft(2, '0')}-${_selectedDay!.day.toString().padLeft(2, '0')}'
+                  : null;
+              context.pushNamed(
+                'full-calendar',
+                queryParameters: dateStr != null ? {'date': dateStr} : {},
+              );
+            },
+            backgroundColor: AppColors.primaryContainer,
+            child: const Icon(Icons.schedule_rounded, color: AppColors.onPrimaryContainer),
+          ),
+          const SizedBox(height: 12),
+          // Primary FAB - New Booking
+          FloatingActionButton(
+            heroTag: 'new_booking',
+            onPressed: () {
+              final dateStr = _selectedDay != null
+                  ? '${_selectedDay!.year}-${_selectedDay!.month.toString().padLeft(2, '0')}-${_selectedDay!.day.toString().padLeft(2, '0')}'
+                  : null;
+              context.pushNamed(
+                'booking',
+                queryParameters: dateStr != null ? {'date': dateStr} : {},
+              );
+            },
+            child: const Icon(Icons.add),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final dateStr = _selectedDay != null
-              ? '${_selectedDay!.year}-${_selectedDay!.month.toString().padLeft(2, '0')}-${_selectedDay!.day.toString().padLeft(2, '0')}'
-              : null;
-          context.pushNamed(
-            'booking',
-            queryParameters: dateStr != null ? {'date': dateStr} : {},
-          );
-        },
-        child: const Icon(Icons.add),
       ),
     );
   }
@@ -352,7 +380,7 @@ class _CalendarAppointmentCard extends StatelessWidget {
               vertical: AppSpacing.xs,
             ),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),
             child: Text(

@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:hive_flutter/hive_flutter.dart';
-import '../logging/logger_service.dart';
 import 'collections/collections.dart';
 
 class HiveService {
+  static final HiveService _instance = HiveService._();
+  static HiveService get instance => _instance;
+  factory HiveService() => _instance;
+  HiveService._();
+
   static const String customersBox = 'customers';
   static const String servicesBox = 'services';
   static const String appointmentsBox = 'appointments';
@@ -12,6 +16,9 @@ class HiveService {
   static const String syncQueueBox = 'syncQueue';
   static const String serviceStationsBox = 'serviceStations';
   static const String appointmentServicesBox = 'appointmentServices';
+  static const String institutionsBox = 'institutions';
+  static const String usersBox = 'users';
+  static const String leaveRequestsBox = 'leaveRequests';
 
   late Box<Customer> _customersBox;
   late Box<Service> _servicesBox;
@@ -20,11 +27,13 @@ class HiveService {
   late Box<SyncQueueItem> _syncQueueBox;
   late Box<ServiceStation> _serviceStationsBox;
   late Box<AppointmentService> _appointmentServicesBox;
+  late Box<Institution> _institutionsBox;
+  late Box<User> _usersBox;
+  late Box<LeaveRequest> _leaveRequestsBox;
 
   Future<void> init() async {
-    logger.info('HiveService', 'Initializing Hive database...');
-
-    await Hive.initFlutter();
+    // Provide explicit subdirectory for Android 11+ (API 30+) scoped storage compliance
+    await Hive.initFlutter('bookly_hive');
 
     // Register adapters
     Hive.registerAdapter(CustomerAdapter());
@@ -34,6 +43,9 @@ class HiveService {
     Hive.registerAdapter(SyncQueueItemAdapter());
     Hive.registerAdapter(ServiceStationAdapter());
     Hive.registerAdapter(AppointmentServiceAdapter());
+    Hive.registerAdapter(InstitutionAdapter());
+    Hive.registerAdapter(UserAdapter());
+    Hive.registerAdapter(LeaveRequestAdapter());
 
     // Open boxes
     _customersBox = await Hive.openBox<Customer>(customersBox);
@@ -43,8 +55,9 @@ class HiveService {
     _syncQueueBox = await Hive.openBox<SyncQueueItem>(syncQueueBox);
     _serviceStationsBox = await Hive.openBox<ServiceStation>(serviceStationsBox);
     _appointmentServicesBox = await Hive.openBox<AppointmentService>(appointmentServicesBox);
-
-    logger.info('HiveService', 'Hive database initialized successfully');
+    _institutionsBox = await Hive.openBox<Institution>(institutionsBox);
+    _usersBox = await Hive.openBox<User>(usersBox);
+    _leaveRequestsBox = await Hive.openBox<LeaveRequest>(leaveRequestsBox);
   }
 
   Future<void> clearAllData() async {
@@ -55,6 +68,9 @@ class HiveService {
     await _syncQueueBox.clear();
     await _serviceStationsBox.clear();
     await _appointmentServicesBox.clear();
+    await _institutionsBox.clear();
+    await _usersBox.clear();
+    await _leaveRequestsBox.clear();
   }
 
   // Customer operations
@@ -89,27 +105,41 @@ class HiveService {
   }
 
   Future<int?> insertCustomer(Customer customer) async {
-    customer.createdAt = DateTime.now();
-    customer.updatedAt = DateTime.now();
-    customer.synced = false;
-    final key = await _customersBox.add(customer);
-    customer.id = key;
-    return key;
+    try {
+      customer.createdAt = DateTime.now();
+      customer.updatedAt = DateTime.now();
+      customer.synced = false;
+      final key = await _customersBox.add(customer);
+      customer.id = key;
+      return key;
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<void> updateCustomer(int id, Customer customer) async {
-    customer.id = id;
-    customer.updatedAt = DateTime.now();
-    customer.synced = false;
-    await _customersBox.put(id, customer);
+  Future<bool> updateCustomer(int id, Customer customer) async {
+    try {
+      customer.id = id;
+      customer.updatedAt = DateTime.now();
+      customer.synced = false;
+      await _customersBox.put(id, customer);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> deleteCustomer(int id) async {
-    await _customersBox.delete(id);
+  Future<bool> deleteCustomer(int id) async {
+    try {
+      await _customersBox.delete(id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Service operations
-  List<Service> getAllServices() => _servicesBox.values.where((s) => s.isActive).toList();
+  List<Service> getAllServices() => _servicesBox.values.where((s) => s.isActive == true).toList();
 
   Stream<List<Service>> watchAllServices() {
     final controller = StreamController<List<Service>>();
@@ -132,23 +162,37 @@ class HiveService {
   }
 
   Future<int?> insertService(Service service) async {
-    service.createdAt = DateTime.now();
-    service.updatedAt = DateTime.now();
-    service.synced = false;
-    final key = await _servicesBox.add(service);
-    service.id = key; // Hive uses key as id
-    return key;
+    try {
+      service.createdAt = DateTime.now();
+      service.updatedAt = DateTime.now();
+      service.synced = false;
+      final key = await _servicesBox.add(service);
+      service.id = key;
+      return key;
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<void> updateService(int id, Service service) async {
-    service.id = id; // Ensure id is set
-    service.updatedAt = DateTime.now();
-    service.synced = false;
-    await _servicesBox.put(id, service);
+  Future<bool> updateService(int id, Service service) async {
+    try {
+      service.id = id;
+      service.updatedAt = DateTime.now();
+      service.synced = false;
+      await _servicesBox.put(id, service);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> deleteService(int id) async {
-    await _servicesBox.delete(id);
+  Future<bool> deleteService(int id) async {
+    try {
+      await _servicesBox.delete(id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> softDeleteService(int id) async {
@@ -224,23 +268,37 @@ class HiveService {
   }
 
   Future<int?> insertAppointment(Appointment appointment) async {
-    appointment.createdAt = DateTime.now();
-    appointment.updatedAt = DateTime.now();
-    appointment.synced = false;
-    final key = await _appointmentsBox.add(appointment);
-    appointment.id = key;
-    return key;
+    try {
+      appointment.createdAt = DateTime.now();
+      appointment.updatedAt = DateTime.now();
+      appointment.synced = false;
+      final key = await _appointmentsBox.add(appointment);
+      appointment.id = key;
+      return key;
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<void> updateAppointment(int id, Appointment appointment) async {
-    appointment.id = id;
-    appointment.updatedAt = DateTime.now();
-    appointment.synced = false;
-    await _appointmentsBox.put(id, appointment);
+  Future<bool> updateAppointment(int id, Appointment appointment) async {
+    try {
+      appointment.id = id;
+      appointment.updatedAt = DateTime.now();
+      appointment.synced = false;
+      await _appointmentsBox.put(id, appointment);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> deleteAppointment(int id) async {
-    await _appointmentsBox.delete(id);
+  Future<bool> deleteAppointment(int id) async {
+    try {
+      await _appointmentsBox.delete(id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Call log operations
@@ -287,20 +345,34 @@ class HiveService {
   }
 
   Future<int?> insertCallLog(CallLog callLog) async {
-    callLog.createdAt = DateTime.now();
-    callLog.synced = false;
-    final key = await _callLogsBox.add(callLog);
-    callLog.id = key;
-    return key;
+    try {
+      callLog.createdAt = DateTime.now();
+      callLog.synced = false;
+      final key = await _callLogsBox.add(callLog);
+      callLog.id = key;
+      return key;
+    } catch (e) {
+      return null;
+    }
   }
 
-  Future<void> updateCallLog(int id, CallLog callLog) async {
-    callLog.id = id;
-    await _callLogsBox.put(id, callLog);
+  Future<bool> updateCallLog(int id, CallLog callLog) async {
+    try {
+      callLog.id = id;
+      await _callLogsBox.put(id, callLog);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> deleteCallLog(int id) async {
-    await _callLogsBox.delete(id);
+  Future<bool> deleteCallLog(int id) async {
+    try {
+      await _callLogsBox.delete(id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Sync queue operations
@@ -433,5 +505,206 @@ class HiveService {
     } catch (e) {
       return 'system';
     }
+  }
+
+  // Institution operations
+  List<Institution> getAllInstitutions() => _institutionsBox.values.toList();
+
+  Institution? getInstitutionById(String id) {
+    try {
+      return _institutionsBox.get(id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Institution? getInstitutionByOwnerId(String ownerId) {
+    try {
+      return _institutionsBox.values.firstWhere((i) => i.ownerId == ownerId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String?> insertInstitution(Institution institution) async {
+    institution.createdAt = DateTime.now();
+    institution.updatedAt = DateTime.now();
+    final key = await _institutionsBox.put(institution.id, institution);
+    return key as String?;
+  }
+
+  Future<void> updateInstitution(String id, Institution institution) async {
+    institution.updatedAt = DateTime.now();
+    await _institutionsBox.put(id, institution);
+  }
+
+  // User operations
+  List<User> getAllUsers() => _usersBox.values.toList();
+
+  List<User> getUsersForInstitution(String institutionId) {
+    return _usersBox.values.where((u) => u.institutionId == institutionId).toList();
+  }
+
+  User? getUserById(String id) {
+    try {
+      return _usersBox.get(id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  User? getUserByEmail(String email) {
+    try {
+      return _usersBox.values.firstWhere((u) => u.email == email);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> insertUser(User user) async {
+    user.createdAt = DateTime.now();
+    user.updatedAt = DateTime.now();
+    await _usersBox.put(user.id, user);
+  }
+
+  Future<void> updateUser(String id, User user) async {
+    user.updatedAt = DateTime.now();
+    await _usersBox.put(id, user);
+  }
+
+  Future<void> deleteUser(String id) async {
+    await _usersBox.delete(id);
+  }
+
+  // Institution-scoped queries (filter by institutionId)
+  List<Customer> getCustomersForInstitution(String institutionId) {
+    return _customersBox.values.where((c) => c.institutionId == institutionId).toList();
+  }
+
+  Stream<List<Customer>> watchCustomersForInstitution(String institutionId) {
+    final controller = StreamController<List<Customer>>();
+    controller.add(getCustomersForInstitution(institutionId));
+    final subscription = _customersBox.watch().listen((_) {
+      controller.add(getCustomersForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  List<Service> getServicesForInstitution(String institutionId) {
+    return _servicesBox.values
+        .where((s) => s.institutionId == institutionId && s.isActive == true)
+        .toList();
+  }
+
+  Stream<List<Service>> watchServicesForInstitution(String institutionId) {
+    final controller = StreamController<List<Service>>();
+    controller.add(getServicesForInstitution(institutionId));
+    final subscription = _servicesBox.watch().listen((_) {
+      controller.add(getServicesForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  List<Appointment> getAppointmentsForInstitution(String institutionId) {
+    return _appointmentsBox.values.where((a) => a.institutionId == institutionId).toList();
+  }
+
+  Stream<List<Appointment>> watchAppointmentsForInstitution(String institutionId) {
+    final controller = StreamController<List<Appointment>>();
+    controller.add(getAppointmentsForInstitution(institutionId));
+    final subscription = _appointmentsBox.watch().listen((_) {
+      controller.add(getAppointmentsForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  List<CallLog> getCallLogsForInstitution(String institutionId) {
+    return _callLogsBox.values.where((c) => c.institutionId == institutionId).toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  Stream<List<CallLog>> watchCallLogsForInstitution(String institutionId) {
+    final controller = StreamController<List<CallLog>>();
+    controller.add(getCallLogsForInstitution(institutionId));
+    final subscription = _callLogsBox.watch().listen((_) {
+      controller.add(getCallLogsForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  List<ServiceStation> getStationsForInstitution(String institutionId) {
+    return _serviceStationsBox.values.where((s) => s.institutionId == institutionId).toList();
+  }
+
+  Stream<List<ServiceStation>> watchStationsForInstitution(String institutionId) {
+    final controller = StreamController<List<ServiceStation>>();
+    controller.add(getStationsForInstitution(institutionId));
+    final subscription = _serviceStationsBox.watch().listen((_) {
+      controller.add(getStationsForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  // Leave Request operations
+  List<LeaveRequest> getLeaveRequestsForInstitution(String institutionId) {
+    return _leaveRequestsBox.values
+        .where((r) => r.institutionId == institutionId)
+        .toList()
+      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+  }
+
+  List<LeaveRequest> getPendingLeaveRequests(String institutionId) {
+    return _leaveRequestsBox.values
+        .where((r) => r.institutionId == institutionId && r.status == 'pending')
+        .toList()
+      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+  }
+
+  Stream<List<LeaveRequest>> watchLeaveRequestsForInstitution(String institutionId) {
+    final controller = StreamController<List<LeaveRequest>>();
+    controller.add(getLeaveRequestsForInstitution(institutionId));
+    final subscription = _leaveRequestsBox.watch().listen((_) {
+      controller.add(getLeaveRequestsForInstitution(institutionId));
+    });
+    controller.onCancel = () => subscription.cancel();
+    return controller.stream;
+  }
+
+  LeaveRequest? getLeaveRequestById(String id) {
+    try {
+      return _leaveRequestsBox.get(id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<int?> insertLeaveRequest(LeaveRequest request) async {
+    request.requestedAt = DateTime.now();
+    final key = await _leaveRequestsBox.add(request);
+    request.id = key.toString();
+    return key;
+  }
+
+  Future<void> updateLeaveRequest(String id, LeaveRequest request) async {
+    request.id = id;
+    if (request.status != 'pending') {
+      request.processedAt = DateTime.now();
+    }
+    await _leaveRequestsBox.put(id, request);
+  }
+
+  Future<void> deleteLeaveRequest(String id) async {
+    await _leaveRequestsBox.delete(id);
+  }
+
+  int getPendingLeaveRequestCount(String institutionId) {
+    return _leaveRequestsBox.values
+        .where((r) => r.institutionId == institutionId && r.status == 'pending')
+        .length;
   }
 }

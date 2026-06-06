@@ -37,5 +37,11 @@ class CallLog extends HiveObject {
   @HiveField(10)
   late bool synced;
 
+  @HiveField(11)
+  String? institutionId;
+
+  @HiveField(12)
+  String? handledByUserId;
+
   CallLog();
 }

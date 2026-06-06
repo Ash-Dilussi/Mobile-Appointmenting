@@ -8,6 +8,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../shared/widgets/info_button.dart';
+import '../../../../shared/widgets/pebble_context_menu.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/call_history_provider.dart';
 
@@ -147,83 +149,84 @@ class _CallHistoryCard extends ConsumerWidget {
       statusText = callLog.direction;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
+    return PebbleContextMenuWrapper(
+      title: callLog.phoneNumber,
+      actions: [
+        PebbleContextAction(
+          icon: Icons.call,
+          label: 'Call Back',
+          onTap: () => _handleCallBack(context, ref),
+        ),
+        PebbleContextAction(
+          icon: Icons.event,
+          label: 'Book Appointment',
+          onTap: () {
+            context.goNamed(
+              'booking',
+              queryParameters: {'phone': callLog.phoneNumber},
+            );
+          },
+        ),
+        if (callLog.linkedAppointmentId == null)
+          PebbleContextAction(
+            icon: Icons.person_add,
+            label: 'Add as Customer',
+            onTap: () {
+              context.goNamed(
+                'add-customer',
+                queryParameters: {'phone': callLog.phoneNumber},
+              );
+            },
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  callLog.phoneNumber,
-                  style: AppTypography.bodyLarge,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$statusText • ${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
-                  style: AppTypography.bodySmall,
-                ),
-                if (callLog.durationSeconds > 0)
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Duration: ${_formatDuration(callLog.durationSeconds)}',
+                    callLog.phoneNumber,
+                    style: AppTypography.bodyLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$statusText • ${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
                     style: AppTypography.bodySmall,
                   ),
-              ],
+                  if (callLog.durationSeconds > 0)
+                    Text(
+                      'Duration: ${_formatDuration(callLog.durationSeconds)}',
+                      style: AppTypography.bodySmall,
+                    ),
+                ],
+              ),
             ),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.secondary),
-            onSelected: (value) => _handleAction(context, value, ref),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'call',
-                child: Row(
-                  children: [
-                    Icon(Icons.call, size: 20),
-                    SizedBox(width: 8),
-                    Text('Call Back'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'book',
-                child: Row(
-                  children: [
-                    Icon(Icons.event, size: 20),
-                    SizedBox(width: 8),
-                    Text('Book Appointment'),
-                  ],
-                ),
-              ),
-              if (callLog.linkedAppointmentId == null)
-                const PopupMenuItem(
-                  value: 'customer',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_add, size: 20),
-                      SizedBox(width: 8),
-                      Text('Add as Customer'),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
+            InfoButton(
+              onTap: () {
+                // For CallLog, info button shows call details
+                // Navigate to a call detail view or show a dialog
+                _showCallDetailsDialog(context, ref);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -237,24 +240,40 @@ class _CallHistoryCard extends ConsumerWidget {
     return '${remainingSeconds}s';
   }
 
-  void _handleAction(BuildContext context, String action, WidgetRef ref) {
-    switch (action) {
-      case 'call':
-        _handleCallBack(context, ref);
-        break;
-      case 'book':
-        context.goNamed(
-          'booking',
-          queryParameters: {'phone': callLog.phoneNumber},
-        );
-        break;
-      case 'customer':
-        context.goNamed(
-          'add-customer',
-          queryParameters: {'phone': callLog.phoneNumber},
-        );
-        break;
-    }
+  void _showCallDetailsDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(callLog.phoneNumber),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _DetailRow(label: 'Direction', value: callLog.direction),
+            _DetailRow(label: 'Status', value: callLog.isMissed ? 'Missed' : 'Answered'),
+            _DetailRow(label: 'Date', value: DateFormat('MMM d, yyyy').format(callLog.timestamp)),
+            _DetailRow(label: 'Time', value: DateFormat('h:mm a').format(callLog.timestamp)),
+            if (callLog.durationSeconds > 0)
+              _DetailRow(label: 'Duration', value: _formatDuration(callLog.durationSeconds)),
+            if (callLog.followedUp)
+              _DetailRow(label: 'Followed Up', value: 'Yes'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleCallBack(context, ref);
+            },
+            child: const Text('Call Back'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleCallBack(BuildContext context, WidgetRef ref) async {
@@ -273,6 +292,40 @@ class _CallHistoryCard extends ConsumerWidget {
         );
       }
     }
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.secondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTypography.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

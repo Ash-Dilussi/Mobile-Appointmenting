@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../providers/auth_provider.dart';
+import '../../../../core/constants/auth_error_messages.dart';
+import '../providers/auth_notifier.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -34,22 +35,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _handleSignUp() async {
     if (_formKey.currentState?.validate() ?? false) {
-      await ref.read(authStateProvider.notifier).signUpWithEmail(
-            _emailController.text.trim(),
-            _passwordController.text,
+      await ref.read(authNotifierProvider.notifier).register(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+            displayName: _nameController.text.trim(),
           );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
+    final authState = ref.watch(authNotifierProvider);
 
-    ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.status == AuthStatus.unauthenticated && next.error != null) {
+    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+      if (next.status == AuthStatus.error && next.errorCode != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(next.error!),
+            content: Text(authErrorMessage(next.errorCode)),
             backgroundColor: AppColors.error,
           ),
         );

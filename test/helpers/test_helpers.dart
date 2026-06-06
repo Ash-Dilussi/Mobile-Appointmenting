@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
 import 'package:bookly/core/database/collections/collections.dart';
 import 'package:bookly/core/database/hive_service.dart';
 

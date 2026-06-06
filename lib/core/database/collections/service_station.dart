@@ -28,5 +28,8 @@ class ServiceStation extends HiveObject {
   @HiveField(7)
   late bool synced;
 
+  @HiveField(8)
+  String? institutionId;
+
   ServiceStation();
 }

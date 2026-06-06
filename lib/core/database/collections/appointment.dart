@@ -40,5 +40,17 @@ class Appointment extends HiveObject {
   @HiveField(11)
   late bool synced;
 
+  @HiveField(12)
+  String? institutionId;
+
+  @HiveField(13)
+  String? handledByUserId;
+
+  @HiveField(14)
+  String? googleEventId;
+
+  @HiveField(15)
+  bool syncWithGoogle = false;
+
   Appointment();
 }

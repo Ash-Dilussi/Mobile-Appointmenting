@@ -31,5 +31,8 @@ class Customer extends HiveObject {
   @HiveField(8)
   late bool synced;
 
+  @HiveField(9)
+  String? institutionId;
+
   Customer();
 }

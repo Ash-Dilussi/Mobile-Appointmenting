@@ -69,6 +69,7 @@ class LoggerService {
   }
 
   /// Log a message with timestamp and level
+  /// Only ERROR level messages are written to file to reduce noise
   Future<void> log(
     LogLevel level,
     String source,
@@ -77,6 +78,9 @@ class LoggerService {
     StackTrace? stackTrace,
   }) async {
     if (!_initialized) await init();
+
+    // Only log errors to file - reduce noise in production logs
+    if (level != LogLevel.error) return;
 
     final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
     final levelStr = level.name.toUpperCase().padRight(7);

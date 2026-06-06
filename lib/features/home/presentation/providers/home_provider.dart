@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/hive_service.dart';
 import '../../../../core/database/collections/collections.dart';
-import '../../../../main.dart';
+import '../../../../core/providers/hive_service_provider.dart';
 
 // Hive service provider alias
 final homeHiveProvider = Provider<HiveService>((ref) {

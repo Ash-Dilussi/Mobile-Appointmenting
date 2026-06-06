@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function callerInstitutionId() {
+      return callerProfile().institutionId;
+    }
+
+    function callerRole() {
+      return callerProfile().role;
+    }
+
+    function isSameInstitution(institutionId) {
+      return isSignedIn() && callerInstitutionId() == institutionId;
+    }
+
+    function isOwnerOf(institutionId) {
+      return isSameInstitution(institutionId) && callerRole() == 'owner';
+    }
+
+    // users/{uid}
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // institutions/{institutionId}
+    match /institutions/{institutionId} {
+      allow read: if isSameInstitution(institutionId);
+      allow write: if isOwnerOf(institutionId);
+
+      match /officers/{officerUid} {
+        allow read: if isSameInstitution(institutionId);
+        allow write: if isOwnerOf(institutionId);
+      }
+    }
+
+    // Top-level collections with institutionId field-based isolation
+
+    // customers/{customerId}
+    match /customers/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    }
+
+    // services/{serviceId}
+    match /services/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    }
+
+    // appointments/{appointmentId}
+    match /appointments/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    }
+
+    // call_logs/{callLogId}
+    match /call_logs/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      // Call logs are append-only - no delete allowed
+    }
+
+    // service_stations/{stationId}
+    match /service_stations/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isOwnerOf(callerInstitutionId());
+    }
+
+    // appointment_services/{docId}
+    match /appointment_services/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    }
+
+    // leave_requests/{leaveRequestId}
+    match /leave_requests/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update: if isOwnerOf(callerInstitutionId());
+      allow delete: if isOwnerOf(callerInstitutionId());
+    }
+
+    // sync_queue/{syncItemId}
+    match /sync_queue/{docId} {
+      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
+      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    }
+  }
+}
