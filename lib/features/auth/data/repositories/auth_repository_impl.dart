@@ -61,8 +61,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    final credential =
-        await _firebaseSource.signInWithEmail(email, password);
+    final credential = await _firebaseSource.signInWithEmail(email, password);
     if (credential.user == null) throw AuthException.noFirebaseUser();
     return _resolveAndCacheProfile(credential.user!);
   }
@@ -80,10 +79,26 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String displayName,
   }) async {
-    final credential =
-        await _firebaseSource.registerWithEmail(email, password);
+    late UserCredential credential;
+
+    try {
+      credential = await _firebaseSource.registerWithEmail(email, password);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        // Partial registration: Auth account exists but Firestore write
+        // failed on a previous attempt. Sign in silently and recover.
+        credential = await _firebaseSource.signInWithEmail(email, password);
+      } else {
+        throw AuthException.fromFirebase(e);
+      }
+    }
+
     if (credential.user == null) throw AuthException.noFirebaseUser();
-    await _firebaseSource.updateDisplayName(displayName);
+
+    // Best-effort display name update — non-fatal if it fails
+    try {
+      await _firebaseSource.updateDisplayName(displayName);
+    } catch (_) {}
 
     final skeleton = FirestoreUserModel.newUserSkeleton(
       uid: credential.user!.uid,
@@ -91,8 +106,15 @@ class AuthRepositoryImpl implements AuthRepository {
       displayName: displayName,
       isEmailVerified: credential.user!.emailVerified,
     );
-    await _firestoreSource.upsertProfile(skeleton);
 
+    // Best-effort Firestore write — non-fatal if rules are not yet published.
+    // The profile will be written on next cold-start via _resolveAndCacheProfile.
+    try {
+      await _firestoreSource.upsertProfile(skeleton);
+    } catch (_) {}
+
+    // Always write to Hive — Auth succeeded, session is valid regardless
+    // of whether Firestore write succeeded.
     final authUser = skeleton.toAuthUser();
     await HiveInitializer.writeCachedUser(authUser);
     return authUser;

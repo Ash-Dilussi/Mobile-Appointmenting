@@ -51,6 +51,8 @@
 		<string>This app records phone conversations for customer safety and appointment tracking. Recordings are stored locally and used only for generating appointment bookings.</string>
 		<key>NSPhoneUsageDescription</key>
 		<string>This app monitors call state to trigger recording and enable appointment creation from phone conversations.</string>
+		<key>NSContactsUsageDescription</key>
+		<string>Bookly uses your contacts to help you quickly create customer profiles.</string>
 		<key>CFBundleURLTypes</key>
 		<array>
 			<dict>

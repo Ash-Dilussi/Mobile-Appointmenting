@@ -9,9 +9,16 @@ val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build"
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    // ── Cross-drive fix (Windows) ────────────────────────────────────────
+    // Gradle cannot compute relative paths across drive letters (e.g. D:\ vs C:\).
+    // Pinning every sub-project's build dir under rootProject.buildDir ensures
+    // all plugin artefacts (google_sign_in_android, firebase_auth, etc.) resolve
+    // on the same drive as the Flutter project.
+    layout.buildDirectory.set(
+        rootProject.layout.buildDirectory.dir(project.name)
+    )
 }
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

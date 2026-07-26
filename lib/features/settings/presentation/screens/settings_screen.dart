@@ -8,7 +8,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/database/collections/collections.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../../core/auth/rbac.dart';
 import '../../../../core/providers/auth_providers.dart';
@@ -34,12 +34,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _checkCompanyStatus() {
     final session = ref.read(authSessionProvider);
     setState(() {
-      _hasNoCompany = session?.institutionId == null && session?.role == Role.owner;
+      _hasNoCompany =
+          session?.institutionId == null && session?.role == Role.owner;
     });
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    await ref.read(authNotifierProvider.notifier).signOut();
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(authSessionProvider);
+
+    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+      if (next.status == AuthStatus.unauthenticated) {
+        context.go('/login');
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -63,8 +98,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 _SettingsTile(
                   icon: Icons.person_outline,
-                  title: 'Profile',
-                  subtitle: 'Manage your account details',
+                  title: session?.name?.isNotEmpty == true
+                      ? session!.name!
+                      : 'Profile',
+                  subtitle: session?.email ?? 'Manage your account details',
                   onTap: () {
                     context.goNamed('profile-setup');
                   },
@@ -261,23 +298,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _SettingsCard(
               children: [
                 _HintTile(
-                  hint: 'When a call comes in, tap "Book Now" to quickly schedule an appointment',
+                  hint:
+                      'When a call comes in, tap "Book Now" to quickly schedule an appointment',
                 ),
-                const Divider(height: 1, indent: AppSpacing.xxl, color: AppColors.outline),
+                const Divider(
+                    height: 1,
+                    indent: AppSpacing.xxl,
+                    color: AppColors.outline),
                 _HintTile(
-                  hint: 'Use the calendar view to see your entire schedule at a glance',
+                  hint:
+                      'Use the calendar view to see your entire schedule at a glance',
                 ),
-                const Divider(height: 1, indent: AppSpacing.xxl, color: AppColors.outline),
+                const Divider(
+                    height: 1,
+                    indent: AppSpacing.xxl,
+                    color: AppColors.outline),
                 _HintTile(
                   hint: 'Search for existing customers by name or phone number',
                 ),
-                const Divider(height: 1, indent: AppSpacing.xxl, color: AppColors.outline),
+                const Divider(
+                    height: 1,
+                    indent: AppSpacing.xxl,
+                    color: AppColors.outline),
                 _HintTile(
-                  hint: 'Missed calls are tracked automatically - follow up with one tap',
+                  hint:
+                      'Missed calls are tracked automatically - follow up with one tap',
                 ),
-                const Divider(height: 1, indent: AppSpacing.xxl, color: AppColors.outline),
+                const Divider(
+                    height: 1,
+                    indent: AppSpacing.xxl,
+                    color: AppColors.outline),
                 _HintTile(
-                  hint: 'Your data is stored locally and works even without internet',
+                  hint:
+                      'Your data is stored locally and works even without internet',
                 ),
               ],
             ),
@@ -348,9 +401,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  ref.read(authStateProvider.notifier).signOut();
-                },
+                onPressed: () => _handleSignOut(),
                 icon: const Icon(Icons.logout, color: AppColors.error),
                 label: Text(
                   'Sign Out',
@@ -722,7 +773,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: 'Always use light theme',
               isSelected: currentMode == ThemeMode.light,
               onTap: () {
-                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light);
+                ref
+                    .read(themeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.light);
                 Navigator.pop(context);
               },
             ),
@@ -732,7 +785,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: 'Always use dark theme',
               isSelected: currentMode == ThemeMode.dark,
               onTap: () {
-                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark);
+                ref
+                    .read(themeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.dark);
                 Navigator.pop(context);
               },
             ),
@@ -742,7 +797,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: 'Follow device settings',
               isSelected: currentMode == ThemeMode.system,
               onTap: () {
-                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system);
+                ref
+                    .read(themeModeProvider.notifier)
+                    .setThemeMode(ThemeMode.system);
                 Navigator.pop(context);
               },
             ),

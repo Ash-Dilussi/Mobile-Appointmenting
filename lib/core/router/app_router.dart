@@ -14,6 +14,7 @@ import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/main_shell.dart';
 import '../../features/calendar/presentation/screens/calendar_screen.dart';
 import '../../features/call_history/presentation/screens/call_history_screen.dart';
+import '../../features/call_log/presentation/screens/call_log_screen.dart';
 import '../../features/customers/presentation/screens/customers_screen.dart';
 import '../../features/customers/presentation/screens/customer_profile_screen.dart';
 import '../../features/customers/presentation/screens/add_customer_screen.dart';
@@ -35,6 +36,7 @@ import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/booking/presentation/screens/booking_confirmation_screen.dart';
 import '../../features/booking/presentation/screens/appointment_detail_screen.dart';
 import '../../features/calendar/presentation/screens/full_calendar_screen.dart';
+import '../../features/subscription/presentation/upgrade_screen.dart';
 
 // Navigation shell key
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -339,6 +341,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               : DateTime.now();
           return FullCalendarScreen(initialDate: date);
         },
+      ),
+      GoRoute(
+        path: '/upgrade',
+        name: 'upgrade',
+        builder: (context, state) => const UpgradeScreen(),
+      ),
+      GoRoute(
+        path: '/call-log',
+        name: 'call-log',
+        builder: (context, state) => const CallLogScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

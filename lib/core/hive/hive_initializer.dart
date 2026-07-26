@@ -9,7 +9,9 @@ class HiveInitializer {
   static const String _currentUserKey = 'current_user';
 
   static Future<void> init() async {
-    await Hive.initFlutter();
+    // Hive.initFlutter('bookly_hive') was already called by HiveService.init().
+    // Do NOT call Hive.initFlutter() again — it resets the storage path and
+    // invalidates all boxes opened by HiveService.
     Hive.registerAdapter(CachedUserProfileAdapter());
     await Hive.openBox<CachedUserProfile>(authCacheBox);
   }

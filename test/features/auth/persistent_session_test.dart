@@ -1,22 +1,67 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:bookly/features/auth/domain/entities/auth_user.dart';
 import 'package:bookly/features/auth/domain/repositories/auth_repository.dart';
 import 'package:bookly/features/auth/presentation/providers/auth_notifier.dart';
+import 'package:bookly/core/hive/hive_initializer.dart';
+import 'package:bookly/features/auth/presentation/providers/auth_session_provider.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
 class MockRef extends Mock implements Ref {}
 
+class MockAuthSessionNotifier extends Mock implements AuthSessionNotifier {}
+
+class FakeAuthUser extends Fake implements AuthUser {}
+
 void main() {
   group('Persistent Session Tests', () {
     late MockAuthRepository mockRepository;
     late MockRef mockRef;
+    late MockAuthSessionNotifier mockSessionNotifier;
+    late Directory tempDir;
+
+    setUpAll(() async {
+      // Initialize Flutter binding for path_provider
+      TestWidgetsFlutterBinding.ensureInitialized();
+
+      // Create a temp directory for Hive
+      tempDir = await Directory.systemTemp.createTemp('hive_auth_test_');
+
+      // Set up mock path provider
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+        return tempDir.path;
+      });
+
+      // Initialize Hive
+      await Hive.initFlutter(tempDir.path);
+      await HiveInitializer.init();
+
+      registerFallbackValue(FakeAuthUser());
+    });
+
+    tearDownAll(() async {
+      await Hive.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
 
     setUp(() {
       mockRepository = MockAuthRepository();
       mockRef = MockRef();
+      mockSessionNotifier = MockAuthSessionNotifier();
+
+      when(() => mockRef.read(authSessionProvider.notifier))
+          .thenReturn(mockSessionNotifier);
+      when(() => mockSessionNotifier.loadSessionFromAuthUser(any()))
+          .thenAnswer((_) async {});
     });
 
     // C1: User remains logged in after app restart (Hive cache hit)

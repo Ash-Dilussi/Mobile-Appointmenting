@@ -32,17 +32,20 @@ lib/
 ```
 
 **State Management:** Riverpod 2.6+ (`flutter_riverpod`, `riverpod_annotation`)
+
 - Providers live in `presentation/providers/` within each feature
 - Use `StreamProvider`/`FutureProvider` for reactive Hive data
 - `hiveServiceProvider` in `lib/main.dart` provides HiveService singleton
 - Repository pattern decouples UI from storage
 
 **Routing:** GoRouter with ShellRoute for bottom navigation
+
 - Routes defined in `lib/core/router/app_router.dart`
 - Shell route provides 5-tab bottom navigation: Home, Calendar, Call History, Customers, Settings
 - Full-screen routes outside shell for: `/booking`, `/booking/edit/:id`, `/booking/confirmation/:appointmentId`, `/appointment/:id`, `/customer/:id`, `/services`
 
 **Database:** Hive NoSQL (local cache) + Firestore (cloud sync)
+
 - `HiveService` in `lib/core/database/hive_service.dart` — single source of truth for all local CRUD
 - Box names defined as constants in HiveService
 - Stream methods for reactive updates: `watchAllCustomers()`, `watchUpcomingAppointments()`, etc.
@@ -52,15 +55,15 @@ lib/
 
 All records include `institutionId` for strict data isolation between businesses.
 
-| Entity | Core Fields |
-|--------|-------------|
-| **Customer** | `id`, `institutionId`, `name`, `phoneNumber`, `email`, `notes`, `synced` |
-| **Appointment** | `id`, `institutionId`, `customerId`, `serviceId`, `startTime`, `endTime`, `status`, `staffId`, `stationId`, `notes`, `synced` |
-| **CallLog** | `id`, `institutionId`, `phoneNumber`, `timestamp`, `direction`, `durationSeconds`, `isMissed`, `followedUp`, `linkedAppointmentId`, `handledByUserId`, `synced` |
-| **Service** | `id`, `institutionId`, `title`, `defaultDurationMinutes`, `cost`, `description`, `isActive`, `synced` |
-| **ServiceStation** | `id`, `institutionId`, `name`, `synced` |
-| **AppointmentService** | `appointmentId`, `serviceId`, `quantity` (line items) |
-| **SyncQueueItem** | `id`, `tableName`, `recordId`, `action`, `createdAt` |
+| Entity                 | Core Fields                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Customer**           | `id`, `institutionId`, `name`, `phoneNumber`, `email`, `notes`, `synced`                                                                                        |
+| **Appointment**        | `id`, `institutionId`, `customerId`, `serviceId`, `startTime`, `endTime`, `status`, `staffId`, `stationId`, `notes`, `synced`                                   |
+| **CallLog**            | `id`, `institutionId`, `phoneNumber`, `timestamp`, `direction`, `durationSeconds`, `isMissed`, `followedUp`, `linkedAppointmentId`, `handledByUserId`, `synced` |
+| **Service**            | `id`, `institutionId`, `title`, `defaultDurationMinutes`, `cost`, `description`, `isActive`, `synced`                                                           |
+| **ServiceStation**     | `id`, `institutionId`, `name`, `synced`                                                                                                                         |
+| **AppointmentService** | `appointmentId`, `serviceId`, `quantity` (line items)                                                                                                           |
+| **SyncQueueItem**      | `id`, `tableName`, `recordId`, `action`, `createdAt`                                                                                                            |
 
 **Appointment statuses:** `upcoming`, `confirmed`, `ongoing`, `done`, `cancelled`
 
@@ -75,11 +78,13 @@ All records include `institutionId` for strict data isolation between businesses
 **Aesthetic:** Organic Minimalism — "The Polished Pebble" with soft, rounded corners and generous whitespace.
 
 **Primary Colors:**
+
 - Primary: `#904D00` (Solar Orange Dark)
 - Primary Container: `#FF8C00` (Pebble Orange)
 - On Primary Container: `#FFFFFF`
 
 **Secondary Colors:**
+
 - Secondary: `#5F5E5E` (Deep Charcoal)
 - Surface: `#F9F9F9` (Off-White)
 - Surface Container Lowest: `#FFFFFF` (Cards)
@@ -87,6 +92,7 @@ All records include `institutionId` for strict data isolation between businesses
 **Typography:** Inter font family (via `google_fonts` package)
 
 **Corner Radii:**
+
 - SM: 12px, MD: 16px, LG: 24px, XL: 32px, Full: 9999px
 
 **No-Line Rule:** Boundaries use background color shifts, not 1px borders. Containment via tonal contrast.
@@ -109,6 +115,7 @@ Company color themes are stored in `Institution.themePreset` as a `StylePreset` 
 | `royalPurple` | Royal Purple | #6A1B9A |
 
 **How it works:**
+
 - `stylePresetProvider` in `lib/core/theme/style_preset_provider.dart` reads `Institution.themePreset` via `currentInstitutionProvider`
 - Falls back to `solarOrange` if no institution or themePreset is set
 - `app.dart` watches `stylePresetProvider` and builds themes dynamically using `AppTheme.fromPreset(preset, brightness)`
@@ -152,33 +159,36 @@ flutter build ios --debug
 ## Seed Data
 
 Dummy data auto-seeds on app startup via `lib/seed_dummy_data.dart` (called in `main.dart` after `HiveService.init()`):
+
 ```dart
 Future<void> seedDummyData(HiveService hiveService, {bool force = false}) async
 ```
+
 To re-seed, use the `force` parameter or call `HiveService.clearAllData()`.
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `lib/main.dart` | App entry point, database initialization, error handling, seed data, `hiveServiceProvider` definition |
-| `lib/app.dart` | Root MaterialApp with theme and router |
-| `lib/core/router/app_router.dart` | GoRouter configuration, auth redirect logic |
-| `lib/core/database/hive_service.dart` | HiveService with all CRUD operations and stream methods |
-| `lib/seed_dummy_data.dart` | Seeds sample data for testing |
-| `lib/core/theme/app_theme.dart` | Theme configuration |
-| `lib/core/theme/app_colors.dart` | Design system color tokens |
-| `lib/core/theme/app_spacing.dart` | Spacing and radius constants |
-| `lib/core/theme/app_typography.dart` | Typography styles |
-| `lib/core/services/call_detection_service.dart` | Call detection integration |
-| `lib/core/services/call_recording_service.dart` | Call recording via device microphone |
-| `lib/features/home/presentation/screens/main_shell.dart` | Bottom navigation shell with 5 tabs |
-| `lib/features/calendar/presentation/screens/calendar_screen.dart` | Calendar view with busy day indicators |
-| `lib/features/booking/presentation/screens/voice_booking_screen.dart` | Voice-to-booking with speech-to-text (disabled) |
+| File                                                                  | Purpose                                                                                               |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `lib/main.dart`                                                       | App entry point, database initialization, error handling, seed data, `hiveServiceProvider` definition |
+| `lib/app.dart`                                                        | Root MaterialApp with theme and router                                                                |
+| `lib/core/router/app_router.dart`                                     | GoRouter configuration, auth redirect logic                                                           |
+| `lib/core/database/hive_service.dart`                                 | HiveService with all CRUD operations and stream methods                                               |
+| `lib/seed_dummy_data.dart`                                            | Seeds sample data for testing                                                                         |
+| `lib/core/theme/app_theme.dart`                                       | Theme configuration                                                                                   |
+| `lib/core/theme/app_colors.dart`                                      | Design system color tokens                                                                            |
+| `lib/core/theme/app_spacing.dart`                                     | Spacing and radius constants                                                                          |
+| `lib/core/theme/app_typography.dart`                                  | Typography styles                                                                                     |
+| `lib/core/services/call_detection_service.dart`                       | Call detection integration                                                                            |
+| `lib/core/services/call_recording_service.dart`                       | Call recording via device microphone                                                                  |
+| `lib/features/home/presentation/screens/main_shell.dart`              | Bottom navigation shell with 5 tabs                                                                   |
+| `lib/features/calendar/presentation/screens/calendar_screen.dart`     | Calendar view with busy day indicators                                                                |
+| `lib/features/booking/presentation/screens/voice_booking_screen.dart` | Voice-to-booking with speech-to-text (disabled)                                                       |
 
 ## Navigation Routes
 
 Bottom navigation (inside ShellRoute):
+
 - `/home` — HomeScreen
 - `/calendar` — CalendarScreen
 - `/call-history` — CallHistoryScreen
@@ -186,6 +196,7 @@ Bottom navigation (inside ShellRoute):
 - `/settings` — SettingsScreen
 
 Full-screen routes (outside shell):
+
 - `/booking` — New appointment (accepts `?phone=`, `?callLogId=`, `?date=` query params for pre-filling)
 - `/booking/edit/:id` — Edit appointment
 - `/booking/confirmation/:appointmentId` — Booking confirmation
@@ -196,10 +207,12 @@ Full-screen routes (outside shell):
 ## Provider Organization
 
 Each feature has its providers in `presentation/providers/`:
+
 - `auth_provider.dart` — AuthStateNotifier for authentication state
 - `home_provider.dart` — UpcomingAppointmentsProvider, RecentCustomersProvider, etc.
 
 Use `ref.watch(homeHiveProvider)` to access HiveService in feature widgets:
+
 ```dart
 final homeHiveProvider = Provider<HiveService>((ref) {
   return ref.watch(hiveServiceProvider);
@@ -213,6 +226,7 @@ final homeHiveProvider = Provider<HiveService>((ref) {
 Hive's `Box.watch()` is single-subscription. Using `StreamController.broadcast` drops initial events causing "stream has already been listened" errors and spinner-forever bugs.
 
 **CORRECT — buffers initial data before listener subscribes:**
+
 ```dart
 Stream<List<T>> watchAllItems() {
   final controller = StreamController<List<T>>();
@@ -226,6 +240,7 @@ Stream<List<T>> watchAllItems() {
 ```
 
 **WRONG — drops pre-listener events:**
+
 ```dart
 Stream<List<T>> watchAllItems() {
   return StreamController.broadcast(  // DON'T USE
@@ -263,17 +278,20 @@ radiusSm: 12, radiusMd: 16, radiusLg: 24, radiusXl: 32, radiusFull: 9999
 When developing features, consider these platform guidelines for app review success:
 
 ### Apple App Store
+
 - **Privacy Details:** Data collection disclosure required (phone numbers, contacts, etc.)
 - **Background Modes:** Only when strictly necessary; call detection requires justification
 - **Permissions:** Request at point of use with clear rationale
 - **User Safety:** Content filtering for notes/comments
 
 ### Google Play
+
 - **Privacy & Security:** Data safety form must match actual data handling
 - **Sensitive Permissions:** `READ_PHONE_STATE`/`READ_CALL_LOG` require justification and privacy policy
 - **Family Safety:** Follow Families Policy if targeting children
 
 ### General Checklist
+
 - [ ] Privacy policy URL in app store listings
 - [ ] Data collection explained in app description
 - [ ] User consent before collecting sensitive data
@@ -294,43 +312,44 @@ Configured via `flutter_native_splash.yaml` with Solar Orange (#904D00) backgrou
 
 ## Bug Fix History (Selected)
 
-| Bug | Cause | Fix |
-|-----|-------|-----|
-| Call History spinner forever | `StreamController.broadcast` with `onListen` fires AFTER subscription; seed data events lost | Fresh `StreamController` with immediate `controller.add()` before returning |
-| Stream "already listened" error | Hive's `Box.watch()` is single-subscription; `broadcast()` doesn't forward initial events | Same fix as above — use fresh `StreamController` |
-| `insertSyncItem` missing ID | Did not set `item.id = key` unlike other insert methods | Added `item.id = key` assignment |
-| seedDummyData not tracking IDs | Returned IDs not captured during bulk insert | Track all: `idList.add(id!)` after each insert |
-| seedDummyData couldn't reseed | Guard returned early if data existed | Added `force` parameter and `clearAllData()` method |
-| BookingScreen close crash | `context.pop()` fails with no stack to pop | Check `context.canPop()` first, fallback to `context.goNamed('home')` |
-| Appointment cards not navigable | Tapping cards did nothing | Changed to `context.goNamed('appointment-detail', ...)` |
+| Bug                                      | Cause                                                                                                | Fix                                                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Call History spinner forever             | `StreamController.broadcast` with `onListen` fires AFTER subscription; seed data events lost         | Fresh `StreamController` with immediate `controller.add()` before returning                                                                |
+| Stream "already listened" error          | Hive's `Box.watch()` is single-subscription; `broadcast()` doesn't forward initial events            | Same fix as above — use fresh `StreamController`                                                                                           |
+| `insertSyncItem` missing ID              | Did not set `item.id = key` unlike other insert methods                                              | Added `item.id = key` assignment                                                                                                           |
+| seedDummyData not tracking IDs           | Returned IDs not captured during bulk insert                                                         | Track all: `idList.add(id!)` after each insert                                                                                             |
+| seedDummyData couldn't reseed            | Guard returned early if data existed                                                                 | Added `force` parameter and `clearAllData()` method                                                                                        |
+| BookingScreen close crash                | `context.pop()` fails with no stack to pop                                                           | Check `context.canPop()` first, fallback to `context.goNamed('home')`                                                                      |
+| Appointment cards not navigable          | Tapping cards did nothing                                                                            | Changed to `context.goNamed('appointment-detail', ...)`                                                                                    |
+| authSessionProvider empty on fresh login | Explicit auth methods (`register`/`signIn`) set AuthState but never called `loadSessionFromAuthUser` | Added `await _ref.read(authSessionProvider.notifier).loadSessionFromAuthUser(user)` before `_routeByInstitution` in all three auth methods |
 
 ## Available Skills & MCP Tools
 
 ### Claude Code Skills (Slash Commands)
 
-| Skill | Trigger | Use When |
-|-------|---------|----------|
-| `update-config` | `/update-config` | Configure settings, permissions, hooks, env vars |
-| `simplify` | `/simplify` | Review code for reuse, quality, efficiency |
-| `loop` | `/loop` | Set up recurring tasks/polls |
-| `claude-api` | `/claude-api` | Building apps with Claude API/SDK |
+| Skill           | Trigger          | Use When                                                               |
+| --------------- | ---------------- | ---------------------------------------------------------------------- |
+| `update-config` | `/update-config` | Configure settings, permissions, hooks, env vars                       |
+| `simplify`      | `/simplify`      | Review code for reuse, quality, efficiency                             |
+| `loop`          | `/loop`          | Set up recurring tasks/polls                                           |
+| `claude-api`    | `/claude-api`    | Building apps with Claude API/SDK                                      |
 | `ui-ux-pro-max` | `/ui-ux-pro-max` | UI/UX design intelligence (50+ styles, 161 palettes, 57 font pairings) |
 
 ### Stitch MCP Tools (Google AI UI Generation)
 
-| Tool | Purpose |
-|------|---------|
-| `mcp__stitch__create_project` | Create new Stitch project |
-| `mcp__stitch__list_projects` | List all Stitch projects |
-| `mcp__stitch__get_project` | Get project details |
-| `mcp__stitch__list_screens` | List screens in a project |
-| `mcp__stitch__get_screen` | Get screen details |
-| `mcp__stitch__generate_screen_from_text` | Generate screen from text prompt |
-| `mcp__stitch__edit_screens` | Edit existing screens with text prompt |
-| `mcp__stitch__generate_variants` | Generate variant designs |
-| `mcp__stitch__create_design_system` | Create design system (colors, typography, shapes) |
-| `mcp__stitch__update_design_system` | Update design system |
-| `mcp__stitch__apply_design_system` | Apply design system to screens |
-| `mcp__stitch__list_design_systems` | List design systems |
+| Tool                                     | Purpose                                           |
+| ---------------------------------------- | ------------------------------------------------- |
+| `mcp__stitch__create_project`            | Create new Stitch project                         |
+| `mcp__stitch__list_projects`             | List all Stitch projects                          |
+| `mcp__stitch__get_project`               | Get project details                               |
+| `mcp__stitch__list_screens`              | List screens in a project                         |
+| `mcp__stitch__get_screen`                | Get screen details                                |
+| `mcp__stitch__generate_screen_from_text` | Generate screen from text prompt                  |
+| `mcp__stitch__edit_screens`              | Edit existing screens with text prompt            |
+| `mcp__stitch__generate_variants`         | Generate variant designs                          |
+| `mcp__stitch__create_design_system`      | Create design system (colors, typography, shapes) |
+| `mcp__stitch__update_design_system`      | Update design system                              |
+| `mcp__stitch__apply_design_system`       | Apply design system to screens                    |
+| `mcp__stitch__list_design_systems`       | List design systems                               |
 
 **Use Stitch when:** Generating new UI screens, creating design systems, editing/applying styles to existing screens.

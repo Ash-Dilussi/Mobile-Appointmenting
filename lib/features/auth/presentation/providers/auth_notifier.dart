@@ -36,8 +36,8 @@ class AuthState {
       AuthState._(status: AuthStatus.authenticated, user: user);
   factory AuthState.newUser(AuthUser user) =>
       AuthState._(status: AuthStatus.newUser, user: user);
-  factory AuthState.error(String code, [String? message]) =>
-      AuthState._(status: AuthStatus.error, errorCode: code, errorMessage: message);
+  factory AuthState.error(String code, [String? message]) => AuthState._(
+      status: AuthStatus.error, errorCode: code, errorMessage: message);
 
   bool get isLoading =>
       status == AuthStatus.loading || status == AuthStatus.initial;
@@ -54,26 +54,58 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _onStartup() async {
     // AppLaunchNotifier handles the cold-start decision.
     // AuthNotifier listens for mid-session state changes only.
+    //
+    // GUARD: while an explicit auth action (register/signIn*/signOut) is
+    // actively running, state.status == AuthStatus.loading for the entire
+    // duration of that action. Firebase's authStateChanges fires internally
+    // and immediately once createUserWithEmailAndPassword (or any sign-in
+    // call) succeeds — this happens WHILE the explicit method is still
+    // awaiting its own Firestore writes. Without this guard, this passive
+    // listener races against the explicit method and stomps the final state
+    // (newUser/authenticated) with a stale or incorrect one before the
+    // explicit method gets a chance to finish.
+    //
+    // Do NOT widen this to state.isLoading (which also covers `initial`) —
+    // the cold-start case (status == initial) must be allowed through so
+    // this listener can restore a persisted session on app launch.
     _repository.authStateChanges.listen(
       (authUser) {
+        if (state.status == AuthStatus.loading) return;
+
         if (authUser == null) {
           // Session expired or remote sign-out — clear and redirect
           state = AuthState.unauthenticated();
           return;
         }
-        // Session reconfirmed (cache hit or Firestore refresh)
-        _ref.read(authSessionProvider.notifier).loadSessionFromAuthUser(authUser);
-        state = AuthState.authenticated(authUser);
+
+        // Session reconfirmed (cache hit, token refresh, or cold-start
+        // restore). Route by institution status rather than blindly setting
+        // `authenticated` — a user without a linked institution must land on
+        // the institution-link screen, not the dashboard.
+        _ref
+            .read(authSessionProvider.notifier)
+            .loadSessionFromAuthUser(authUser);
+        _routeByInstitution(authUser);
       },
-      onError: (e) => state = AuthState.error(e.toString()),
+      onError: (e) {
+        // Only surface stream-level errors when no explicit flow is already
+        // handling its own error path (register/signIn* set their own
+        // AuthState.error in their catch blocks).
+        if (state.status != AuthStatus.loading) {
+          state = AuthState.error('unknown', e.toString());
+        }
+      },
     );
   }
 
   Future<void> signInWithEmail(String email, String password) async {
     state = AuthState.loading();
     try {
-      final user = await _repository.signInWithEmail(
-          email: email, password: password);
+      final user =
+          await _repository.signInWithEmail(email: email, password: password);
+      await _ref
+          .read(authSessionProvider.notifier)
+          .loadSessionFromAuthUser(user);
       _routeByInstitution(user);
     } on AuthException catch (e) {
       state = AuthState.error(e.code, e.message);
@@ -86,6 +118,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState.loading();
     try {
       final user = await _repository.signInWithGoogle();
+      await _ref
+          .read(authSessionProvider.notifier)
+          .loadSessionFromAuthUser(user);
       _routeByInstitution(user);
     } on AuthException catch (e) {
       state = AuthState.error(e.code, e.message);
@@ -103,6 +138,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _repository.registerWithEmail(
           email: email, password: password, displayName: displayName);
+      await _ref
+          .read(authSessionProvider.notifier)
+          .loadSessionFromAuthUser(user);
       _routeByInstitution(user);
     } on AuthException catch (e) {
       state = AuthState.error(e.code, e.message);
@@ -113,11 +151,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signOut() async {
     state = AuthState.loading();
-    // Clear cache before Firebase call — prevents race with authStateChanges null emission
-    await HiveInitializer.clearCachedUser();
-    _ref.read(authSessionProvider.notifier).clearSession();
-    await _repository.signOut();
-    state = AuthState.unauthenticated();
+    try {
+      // Clear cache before Firebase call — prevents race with authStateChanges null emission
+      await HiveInitializer.clearCachedUser();
+      _ref.read(authSessionProvider.notifier).clearSession();
+      await _repository.signOut();
+    } catch (_) {
+      // Sign-out is best-effort. Even if Firebase or Hive throws
+      // (e.g. network error, box not open), clear local state and
+      // send the user to login. They can re-authenticate.
+    } finally {
+      state = AuthState.unauthenticated();
+    }
   }
 
   Future<void> onInstitutionLinked({

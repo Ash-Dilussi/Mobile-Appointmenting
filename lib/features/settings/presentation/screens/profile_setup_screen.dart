@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/hive/hive_initializer.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -17,65 +18,85 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
-  late final TextEditingController _phoneController;
 
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    final user = ref.read(authStateProvider).user;
-    _nameController = TextEditingController(text: user?.name ?? '');
-    _emailController = TextEditingController(text: user?.email ?? '');
-    _phoneController = TextEditingController(text: user?.phone ?? '');
+    _nameController = TextEditingController();
+    _emailController = TextEditingController();
+    // Seed from authSessionProvider — the real Hive-backed session.
+    // Use addPostFrameCallback so ref is available on first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final session = ref.read(authSessionProvider);
+      _nameController.text = session?.name ?? '';
+      _emailController.text = session?.email ?? '';
+    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSave() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      setState(() => _isLoading = true);
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-      await ref.read(authStateProvider.notifier).updateProfile(
-            name: _nameController.text.trim(),
-            phone: _phoneController.text.trim().isEmpty
-                ? null
-                : _phoneController.text.trim(),
+    setState(() => _isLoading = true);
+
+    try {
+      final newName = _nameController.text.trim();
+
+      // 1. Read current Hive cache
+      final currentCache = HiveInitializer.readCachedUser();
+      if (currentCache == null) {
+        // No cache — session may have expired; nothing to update
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Session expired. Please sign in again.')),
+          );
+        }
+        return;
+      }
+
+      // 2. Build updated AuthUser with new name
+      final updatedUser = currentCache.toAuthUser().copyWith(
+            displayName: newName,
           );
 
+      // 3. Write back to Hive — persists across restarts
+      await HiveInitializer.writeCachedUser(updatedUser);
+
+      // 4. Update in-memory session — drives settings screen instantly
       if (mounted) {
-        setState(() => _isLoading = false);
+        ref.read(authSessionProvider.notifier).updateName(newName);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Profile updated successfully'),
-            backgroundColor: AppColors.primary,
-          ),
+              content: Text('Failed to update profile. Please try again.')),
         );
-        context.canPop() ? context.pop() : context.goNamed('settings');
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(authStateProvider);
-
-    ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.error != null && next.error != previous?.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    });
+    ref.watch(authSessionProvider);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -142,36 +163,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   enabled: false,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Email',
                     hintText: 'Enter your email',
-                    prefixIcon: const Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email_outlined),
                     filled: true,
                     fillColor: AppColors.surfaceContainerLow,
                   ),
-                ),
-
-                const SizedBox(height: AppSpacing.lg),
-
-                // Phone field (optional)
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone (optional)',
-                    hintText: 'Enter your phone number',
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                  validator: (value) {
-                    if (value != null && value.isNotEmpty) {
-                      final phoneRegex = RegExp(r'^[\d\s+\-()]{7,20}$');
-                      if (!phoneRegex.hasMatch(value)) {
-                        return 'Please enter a valid phone number';
-                      }
-                    }
-                    return null;
-                  },
                 ),
 
                 const SizedBox(height: AppSpacing.xxl),
@@ -182,7 +180,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
                     ),
                   ),
                   child: _isLoading

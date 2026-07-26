@@ -59,6 +59,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         );
       }
+      if (next.status == AuthStatus.authenticated) {
+        context.go('/home');
+      } else if (next.status == AuthStatus.newUser) {
+        context.go('/home');
+      }
     });
 
     return Scaffold(

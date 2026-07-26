@@ -56,6 +56,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         );
       }
+      if (next.status == AuthStatus.newUser) {
+        context.go('/home');
+      } else if (next.status == AuthStatus.authenticated) {
+        context.go('/home');
+      }
     });
 
     return Scaffold(

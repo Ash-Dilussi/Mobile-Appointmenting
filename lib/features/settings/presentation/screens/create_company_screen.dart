@@ -7,12 +7,14 @@ import '../../../../core/theme/style_preset.dart';
 import '../../../../core/database/collections/institution.dart';
 import '../../../../core/providers/hive_service_provider.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../../../core/entitlements/entitlement_provider.dart';
 
 class CreateCompanyScreen extends ConsumerStatefulWidget {
   const CreateCompanyScreen({super.key});
 
   @override
-  ConsumerState<CreateCompanyScreen> createState() => _CreateCompanyScreenState();
+  ConsumerState<CreateCompanyScreen> createState() =>
+      _CreateCompanyScreenState();
 }
 
 class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
@@ -45,7 +47,8 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
       if (session == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session expired. Please login again.')),
+            const SnackBar(
+                content: Text('Session expired. Please login again.')),
           );
         }
         return;
@@ -81,11 +84,19 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
       // Reload session
       await ref.read(authSessionProvider.notifier).loadSession(session.email);
 
+      // Bootstrap entitlements for the new institution
+      // New institutions start on the free tier.
+      // bootstrap() will write 'free' to Hive cache and attempt Firebase fetch.
+      // It never throws — safe to call without try/catch here.
+      await ref
+          .read(entitlementProvider.notifier)
+          .bootstrap(institutionId: institutionId);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Company created successfully!')),
         );
-        context.goNamed('settings');
+        context.go('/home');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -221,7 +232,8 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? _getPresetPrimaryColor(preset).withValues(alpha: 0.15)
+                          ? _getPresetPrimaryColor(preset)
+                              .withValues(alpha: 0.15)
                           : AppColors.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                       border: Border.all(
@@ -247,7 +259,9 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
                           preset.displayName,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                             color: AppColors.onSurface,
                           ),
                         ),

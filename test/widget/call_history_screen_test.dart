@@ -1,14 +1,118 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:bookly/core/theme/app_colors.dart';
 import 'package:bookly/core/database/collections/collections.dart';
 import 'package:bookly/features/home/presentation/providers/home_provider.dart';
 import 'package:bookly/core/database/hive_service.dart';
 import 'package:bookly/features/call_history/presentation/screens/call_history_screen.dart';
+
+class FakeHttpClientResponse extends Fake implements HttpClientResponse {
+  @override
+  int get statusCode => 200;
+
+  @override
+  HttpHeaders get headers => FakeHttpHeaders();
+
+  @override
+  int get contentLength => 0;
+
+  @override
+  bool get isRedirect => false;
+
+  @override
+  List<RedirectInfo> get redirects => [];
+
+  @override
+  bool get persistentConnection => true;
+
+  @override
+  String get reasonPhrase => 'OK';
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    // Return empty list of bytes for the font
+    return Stream<List<int>>.value([]).listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+  }
+}
+
+class FakeHttpClientRequest extends Fake implements HttpClientRequest {
+  final HttpHeaders _headers = FakeHttpHeaders();
+
+  @override
+  HttpHeaders get headers => _headers;
+
+  @override
+  bool followRedirects = true;
+
+  @override
+  int maxRedirects = 5;
+
+  @override
+  bool persistentConnection = true;
+
+  @override
+  int contentLength = 0;
+
+  @override
+  bool bufferOutput = true;
+
+  @override
+  Future addStream(Stream<List<int>> stream) async {}
+
+  @override
+  void add(List<int> data) {}
+
+  @override
+  void write(Object? object) {}
+
+  @override
+  Future<HttpClientResponse> close() async {
+    return FakeHttpClientResponse();
+  }
+}
+
+class FakeHttpHeaders extends Fake implements HttpHeaders {
+  @override
+  void add(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  void forEach(void Function(String name, List<String> values) action) {}
+}
+
+class FakeHttpClient extends Fake implements HttpClient {
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async {
+    return FakeHttpClientRequest();
+  }
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) async {
+    return FakeHttpClientRequest();
+  }
+}
+
+class TestHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return FakeHttpClient();
+  }
+}
 
 /// Widget tests for CallHistoryScreen
 void main() {
@@ -16,6 +120,9 @@ void main() {
   late Directory tempDir;
 
   setUpAll(() async {
+    // Mock HTTP requests so Google Fonts doesn't crash on network fetching
+    HttpOverrides.global = TestHttpOverrides();
+
     // Initialize Flutter binding for path_provider
     TestWidgetsFlutterBinding.ensureInitialized();
 

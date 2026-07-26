@@ -73,7 +73,9 @@ void main() {
       expect(callLog.id, equals(key));
     });
 
-    test('getAllCallLogs should return all inserted call logs sorted by timestamp', () async {
+    test(
+        'getAllCallLogs should return all inserted call logs sorted by timestamp',
+        () async {
       final now = DateTime.now();
 
       final callLog1 = TestHiveHelpers.createCallLog(
@@ -102,7 +104,8 @@ void main() {
       expect(allLogs[2].phoneNumber, equals('+1111111111'));
     });
 
-    test('getMissedCalls should return only missed and not followed up calls', () async {
+    test('getMissedCalls should return only missed and not followed up calls',
+        () async {
       final now = DateTime.now();
 
       final missedCall1 = TestHiveHelpers.createCallLog(
@@ -221,7 +224,9 @@ void main() {
       expect(tomorrowAppointments.length, equals(1));
     });
 
-    test('getUpcomingAppointments should return future appointments with upcoming status', () async {
+    test(
+        'getUpcomingAppointments should return future appointments with upcoming status',
+        () async {
       final now = DateTime.now();
 
       final upcomingFuture = TestHiveHelpers.createAppointment(
@@ -300,7 +305,8 @@ void main() {
       expect(found?.name, equals('John Doe'));
     });
 
-    test('getCustomerByPhone should return null for non-existent phone', () async {
+    test('getCustomerByPhone should return null for non-existent phone',
+        () async {
       final found = hiveService.getCustomerByPhone('+9999999999');
 
       expect(found, isNull);
@@ -345,8 +351,10 @@ void main() {
     });
 
     test('getAllServices should return all services', () async {
-      await hiveService.insertService(TestHiveHelpers.createService(title: 'Service A'));
-      await hiveService.insertService(TestHiveHelpers.createService(title: 'Service B'));
+      await hiveService
+          .insertService(TestHiveHelpers.createService(title: 'Service A'));
+      await hiveService
+          .insertService(TestHiveHelpers.createService(title: 'Service B'));
 
       final all = hiveService.getAllServices();
 
@@ -387,8 +395,10 @@ void main() {
   group('HiveService Stream Methods', () {
     test('watchAllCallLogs should emit initial data immediately', () async {
       // Insert some data first
-      await hiveService.insertCallLog(TestHiveHelpers.createCallLog(phoneNumber: '+1111111111'));
-      await hiveService.insertCallLog(TestHiveHelpers.createCallLog(phoneNumber: '+2222222222'));
+      await hiveService.insertCallLog(
+          TestHiveHelpers.createCallLog(phoneNumber: '+1111111111'));
+      await hiveService.insertCallLog(
+          TestHiveHelpers.createCallLog(phoneNumber: '+2222222222'));
 
       // Create stream
       final stream = hiveService.watchAllCallLogs();
@@ -418,7 +428,8 @@ void main() {
       expect(missed[0].phoneNumber, equals('+1111111111'));
     });
 
-    test('watchUpcomingAppointments should emit upcoming appointments', () async {
+    test('watchUpcomingAppointments should emit upcoming appointments',
+        () async {
       final now = DateTime.now();
 
       await hiveService.insertAppointment(TestHiveHelpers.createAppointment(
@@ -453,7 +464,8 @@ void main() {
       expect(syncItem.id, equals(key));
     });
 
-    test('getPendingSyncItems should return items sorted by createdAt', () async {
+    test('getPendingSyncItems should return items sorted by createdAt',
+        () async {
       final item1 = SyncQueueItem()
         ..entityType = 'Customer'
         ..recordId = 1
@@ -517,6 +529,158 @@ void main() {
 
       final items = hiveService.getPendingSyncItems();
       expect(items, isEmpty);
+    });
+  });
+
+  group('HiveService Customer-CallLog Linking', () {
+    test('getCustomerByPhone should match normalized phone numbers', () async {
+      // Customer stored with formatted phone
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'John Doe',
+        phoneNumber: '+1 (555) 123-4567',
+      );
+      await hiveService.insertCustomer(customer);
+
+      // Search with different format - should still match
+      final found1 = hiveService.getCustomerByPhone('5551234567');
+      expect(found1, isNotNull);
+      expect(found1?.name, equals('John Doe'));
+
+      // Search with yet another format
+      final found2 = hiveService.getCustomerByPhone('+15551234567');
+      expect(found2, isNotNull);
+      expect(found2?.name, equals('John Doe'));
+    });
+
+    test('insertCustomer should auto-link call logs with matching phone',
+        () async {
+      // Insert call log first (before customer exists)
+      final callLog = TestHiveHelpers.createCallLog(
+        phoneNumber: '5551112222',
+        direction: 'incoming',
+      );
+      await hiveService.insertCallLog(callLog);
+
+      // Verify call log has no customer link yet
+      final unlinkedLog = hiveService.getCallLogById(callLog.id!);
+      expect(unlinkedLog?.customerId, isNull);
+
+      // Now insert customer with matching phone
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Jane Doe',
+        phoneNumber: '5551112222',
+      );
+      await hiveService.insertCustomer(customer);
+
+      // Verify call log is now linked
+      final linkedLog = hiveService.getCallLogById(callLog.id!);
+      expect(linkedLog?.customerId, equals(customer.id));
+    });
+
+    test('insertCallLog should auto-link to existing customer', () async {
+      // Insert customer first
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Bob Smith',
+        phoneNumber: '5553334444',
+      );
+      await hiveService.insertCustomer(customer);
+
+      // Insert call log with matching phone
+      final callLog = TestHiveHelpers.createCallLog(
+        phoneNumber: '5553334444',
+        direction: 'outgoing',
+      );
+      await hiveService.insertCallLog(callLog);
+
+      // Verify call log is linked to customer
+      final linkedLog = hiveService.getCallLogById(callLog.id!);
+      expect(linkedLog?.customerId, equals(customer.id));
+    });
+
+    test('linkCallLogsToCustomer should link all matching unlinked logs',
+        () async {
+      // Create customer
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Alice',
+        phoneNumber: '5556667777',
+      );
+      await hiveService.insertCustomer(customer);
+
+      // Insert multiple call logs (some before customer exists)
+      final log1 = TestHiveHelpers.createCallLog(phoneNumber: '5556667777');
+      final log2 = TestHiveHelpers.createCallLog(phoneNumber: '5556667777');
+      final log3 = TestHiveHelpers.createCallLog(phoneNumber: '5556667777');
+      await hiveService.insertCallLog(log1);
+      await hiveService.insertCallLog(log2);
+      await hiveService.insertCallLog(log3);
+
+      // Manually call linkCallLogsToCustomer
+      await hiveService.linkCallLogsToCustomer(customer);
+
+      // All logs should be linked
+      final linkedLog1 = hiveService.getCallLogById(log1.id!);
+      final linkedLog2 = hiveService.getCallLogById(log2.id!);
+      final linkedLog3 = hiveService.getCallLogById(log3.id!);
+      expect(linkedLog1?.customerId, equals(customer.id));
+      expect(linkedLog2?.customerId, equals(customer.id));
+      expect(linkedLog3?.customerId, equals(customer.id));
+    });
+
+    test('backfillCallLogCustomerLinks should link all unlinked logs',
+        () async {
+      // Insert call logs first (no customers exist)
+      final log1 = TestHiveHelpers.createCallLog(phoneNumber: '5558889999');
+      final log2 = TestHiveHelpers.createCallLog(phoneNumber: '5558889999');
+      await hiveService.insertCallLog(log1);
+      await hiveService.insertCallLog(log2);
+
+      // Now create customer
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Charlie',
+        phoneNumber: '5558889999',
+      );
+      await hiveService.insertCustomer(customer);
+
+      // Call backfill
+      await hiveService.backfillCallLogCustomerLinks();
+
+      // All logs should be linked
+      final linkedLog1 = hiveService.getCallLogById(log1.id!);
+      final linkedLog2 = hiveService.getCallLogById(log2.id!);
+      expect(linkedLog1?.customerId, equals(customer.id));
+      expect(linkedLog2?.customerId, equals(customer.id));
+    });
+
+    test('linkCallLogsToCustomer should not re-link already linked logs',
+        () async {
+      // Create first customer
+      final customer1 = TestHiveHelpers.createCustomer(
+        name: 'First',
+        phoneNumber: '5550001111',
+      );
+      await hiveService.insertCustomer(customer1);
+
+      // Insert and link a call log
+      final callLog = TestHiveHelpers.createCallLog(phoneNumber: '5550001111');
+      await hiveService.insertCallLog(callLog);
+
+      // Verify linked
+      final linkedLog = hiveService.getCallLogById(callLog.id!);
+      expect(linkedLog?.customerId, equals(customer1.id));
+
+      // Create second customer with same phone (edge case)
+      final customer2 = TestHiveHelpers.createCustomer(
+        name: 'Second',
+        phoneNumber: '5550001111',
+      );
+      await hiveService.insertCustomer(customer2);
+
+      // Link second customer - should not change already linked log
+      await hiveService.linkCallLogsToCustomer(customer2);
+
+      // Log should still be linked to first customer
+      final stillLinkedLog = hiveService.getCallLogById(callLog.id!);
+      expect(stillLinkedLog?.customerId, equals(customer1.id));
     });
   });
 }

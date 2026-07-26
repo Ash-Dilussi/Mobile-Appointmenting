@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:hive_flutter/hive_flutter.dart';
 import 'collections/collections.dart';
+import '../../features/call_log/data/models/call_log_entry.dart';
+import '../utils/phone_number_utils.dart';
 
 class HiveService {
   static final HiveService _instance = HiveService._();
@@ -19,6 +21,7 @@ class HiveService {
   static const String institutionsBox = 'institutions';
   static const String usersBox = 'users';
   static const String leaveRequestsBox = 'leaveRequests';
+  static const String subscriptionBoxName = 'subscription';
 
   late Box<Customer> _customersBox;
   late Box<Service> _servicesBox;
@@ -30,6 +33,7 @@ class HiveService {
   late Box<Institution> _institutionsBox;
   late Box<User> _usersBox;
   late Box<LeaveRequest> _leaveRequestsBox;
+  late Box<String> _subscriptionBox;
 
   Future<void> init() async {
     // Provide explicit subdirectory for Android 11+ (API 30+) scoped storage compliance
@@ -46,6 +50,7 @@ class HiveService {
     Hive.registerAdapter(InstitutionAdapter());
     Hive.registerAdapter(UserAdapter());
     Hive.registerAdapter(LeaveRequestAdapter());
+    Hive.registerAdapter(CallLogEntryAdapter());
 
     // Open boxes
     _customersBox = await Hive.openBox<Customer>(customersBox);
@@ -53,12 +58,21 @@ class HiveService {
     _appointmentsBox = await Hive.openBox<Appointment>(appointmentsBox);
     _callLogsBox = await Hive.openBox<CallLog>(callLogsBox);
     _syncQueueBox = await Hive.openBox<SyncQueueItem>(syncQueueBox);
-    _serviceStationsBox = await Hive.openBox<ServiceStation>(serviceStationsBox);
-    _appointmentServicesBox = await Hive.openBox<AppointmentService>(appointmentServicesBox);
+    _serviceStationsBox =
+        await Hive.openBox<ServiceStation>(serviceStationsBox);
+    _appointmentServicesBox =
+        await Hive.openBox<AppointmentService>(appointmentServicesBox);
     _institutionsBox = await Hive.openBox<Institution>(institutionsBox);
     _usersBox = await Hive.openBox<User>(usersBox);
     _leaveRequestsBox = await Hive.openBox<LeaveRequest>(leaveRequestsBox);
+    _subscriptionBox = await Hive.openBox<String>(subscriptionBoxName);
+
+    // Open CallLogEntry box for new call log feature
+    await Hive.openBox<CallLogEntry>(CallLogBox.boxName);
   }
+
+  /// Public getter for subscription box — use after [init()] has completed.
+  Box<String> get subscriptionBox => _subscriptionBox;
 
   Future<void> clearAllData() async {
     await _customersBox.clear();
@@ -97,7 +111,7 @@ class HiveService {
   Customer? getCustomerByPhone(String phone) {
     try {
       return _customersBox.values.firstWhere(
-        (c) => c.phoneNumber == phone,
+        (c) => phoneNumbersMatch(c.phoneNumber, phone),
       );
     } catch (e) {
       return null;
@@ -111,6 +125,8 @@ class HiveService {
       customer.synced = false;
       final key = await _customersBox.add(customer);
       customer.id = key;
+      // Link any existing call logs to this new customer
+      await linkCallLogsToCustomer(customer);
       return key;
     } catch (e) {
       return null;
@@ -123,6 +139,8 @@ class HiveService {
       customer.updatedAt = DateTime.now();
       customer.synced = false;
       await _customersBox.put(id, customer);
+      // Re-link call logs in case phone number changed
+      await linkCallLogsToCustomer(customer);
       return true;
     } catch (e) {
       return false;
@@ -138,8 +156,40 @@ class HiveService {
     }
   }
 
+  /// Links all unlinked call logs to a customer based on phone number match.
+  /// Called after insertCustomer or updateCustomer (in case phone number changed).
+  Future<void> linkCallLogsToCustomer(Customer customer) async {
+    if (customer.id == null || customer.phoneNumber.isEmpty) return;
+
+    final unlinkedLogs = _callLogsBox.values.where((log) =>
+        log.customerId == null &&
+        phoneNumbersMatch(log.phoneNumber, customer.phoneNumber));
+
+    for (final log in unlinkedLogs) {
+      log.customerId = customer.id;
+      log.synced = false;
+      await log.save();
+    }
+  }
+
+  /// Idempotent backfill: links all unlinked call logs to their customers.
+  /// Safe to call on every app launch - only touches rows where customerId is null.
+  Future<void> backfillCallLogCustomerLinks() async {
+    for (final log in _callLogsBox.values) {
+      if (log.customerId != null) continue;
+
+      final customer = getCustomerByPhone(log.phoneNumber);
+      if (customer != null && customer.id != null) {
+        log.customerId = customer.id;
+        log.synced = false;
+        await log.save();
+      }
+    }
+  }
+
   // Service operations
-  List<Service> getAllServices() => _servicesBox.values.where((s) => s.isActive == true).toList();
+  List<Service> getAllServices() =>
+      _servicesBox.values.where((s) => s.isActive == true).toList();
 
   Stream<List<Service>> watchAllServices() {
     final controller = StreamController<List<Service>>();
@@ -319,9 +369,8 @@ class HiveService {
   }
 
   List<CallLog> getMissedCalls() {
-    final logs = _callLogsBox.values
-        .where((c) => c.isMissed && !c.followedUp)
-        .toList();
+    final logs =
+        _callLogsBox.values.where((c) => c.isMissed && !c.followedUp).toList();
     logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return logs;
   }
@@ -348,6 +397,11 @@ class HiveService {
     try {
       callLog.createdAt = DateTime.now();
       callLog.synced = false;
+      // Auto-link to customer if phone number matches
+      final customer = getCustomerByPhone(callLog.phoneNumber);
+      if (customer != null) {
+        callLog.customerId = customer.id;
+      }
       final key = await _callLogsBox.add(callLog);
       callLog.id = key;
       return key;
@@ -397,7 +451,8 @@ class HiveService {
   }
 
   // Service Station operations
-  List<ServiceStation> getAllServiceStations() => _serviceStationsBox.values.toList();
+  List<ServiceStation> getAllServiceStations() =>
+      _serviceStationsBox.values.toList();
 
   Stream<List<ServiceStation>> watchAllServiceStations() {
     final controller = StreamController<List<ServiceStation>>();
@@ -438,13 +493,15 @@ class HiveService {
   }
 
   // AppointmentService (line items) operations
-  List<AppointmentService> getAppointmentServicesForAppointment(int appointmentId) {
+  List<AppointmentService> getAppointmentServicesForAppointment(
+      int appointmentId) {
     return _appointmentServicesBox.values
         .where((a) => a.appointmentId == appointmentId)
         .toList();
   }
 
-  Stream<List<AppointmentService>> watchAppointmentServicesForAppointment(int appointmentId) {
+  Stream<List<AppointmentService>> watchAppointmentServicesForAppointment(
+      int appointmentId) {
     final controller = StreamController<List<AppointmentService>>();
     controller.add(getAppointmentServicesForAppointment(appointmentId));
     final subscription = _appointmentServicesBox.watch().listen((_) {
@@ -462,13 +519,15 @@ class HiveService {
     }
   }
 
-  Future<int?> insertAppointmentService(AppointmentService appointmentService) async {
+  Future<int?> insertAppointmentService(
+      AppointmentService appointmentService) async {
     final key = await _appointmentServicesBox.add(appointmentService);
     appointmentService.id = key;
     return key;
   }
 
-  Future<void> updateAppointmentService(int id, AppointmentService appointmentService) async {
+  Future<void> updateAppointmentService(
+      int id, AppointmentService appointmentService) async {
     appointmentService.id = id;
     await _appointmentServicesBox.put(id, appointmentService);
   }
@@ -477,7 +536,8 @@ class HiveService {
     await _appointmentServicesBox.delete(id);
   }
 
-  Future<void> deleteAppointmentServicesForAppointment(int appointmentId) async {
+  Future<void> deleteAppointmentServicesForAppointment(
+      int appointmentId) async {
     final toDelete = _appointmentServicesBox.values
         .where((a) => a.appointmentId == appointmentId)
         .map((a) => a.id)
@@ -542,7 +602,9 @@ class HiveService {
   List<User> getAllUsers() => _usersBox.values.toList();
 
   List<User> getUsersForInstitution(String institutionId) {
-    return _usersBox.values.where((u) => u.institutionId == institutionId).toList();
+    return _usersBox.values
+        .where((u) => u.institutionId == institutionId)
+        .toList();
   }
 
   User? getUserById(String id) {
@@ -578,7 +640,9 @@ class HiveService {
 
   // Institution-scoped queries (filter by institutionId)
   List<Customer> getCustomersForInstitution(String institutionId) {
-    return _customersBox.values.where((c) => c.institutionId == institutionId).toList();
+    return _customersBox.values
+        .where((c) => c.institutionId == institutionId)
+        .toList();
   }
 
   Stream<List<Customer>> watchCustomersForInstitution(String institutionId) {
@@ -608,10 +672,13 @@ class HiveService {
   }
 
   List<Appointment> getAppointmentsForInstitution(String institutionId) {
-    return _appointmentsBox.values.where((a) => a.institutionId == institutionId).toList();
+    return _appointmentsBox.values
+        .where((a) => a.institutionId == institutionId)
+        .toList();
   }
 
-  Stream<List<Appointment>> watchAppointmentsForInstitution(String institutionId) {
+  Stream<List<Appointment>> watchAppointmentsForInstitution(
+      String institutionId) {
     final controller = StreamController<List<Appointment>>();
     controller.add(getAppointmentsForInstitution(institutionId));
     final subscription = _appointmentsBox.watch().listen((_) {
@@ -622,7 +689,9 @@ class HiveService {
   }
 
   List<CallLog> getCallLogsForInstitution(String institutionId) {
-    return _callLogsBox.values.where((c) => c.institutionId == institutionId).toList()
+    return _callLogsBox.values
+        .where((c) => c.institutionId == institutionId)
+        .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 
@@ -637,10 +706,13 @@ class HiveService {
   }
 
   List<ServiceStation> getStationsForInstitution(String institutionId) {
-    return _serviceStationsBox.values.where((s) => s.institutionId == institutionId).toList();
+    return _serviceStationsBox.values
+        .where((s) => s.institutionId == institutionId)
+        .toList();
   }
 
-  Stream<List<ServiceStation>> watchStationsForInstitution(String institutionId) {
+  Stream<List<ServiceStation>> watchStationsForInstitution(
+      String institutionId) {
     final controller = StreamController<List<ServiceStation>>();
     controller.add(getStationsForInstitution(institutionId));
     final subscription = _serviceStationsBox.watch().listen((_) {
@@ -665,7 +737,8 @@ class HiveService {
       ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
   }
 
-  Stream<List<LeaveRequest>> watchLeaveRequestsForInstitution(String institutionId) {
+  Stream<List<LeaveRequest>> watchLeaveRequestsForInstitution(
+      String institutionId) {
     final controller = StreamController<List<LeaveRequest>>();
     controller.add(getLeaveRequestsForInstitution(institutionId));
     final subscription = _leaveRequestsBox.watch().listen((_) {

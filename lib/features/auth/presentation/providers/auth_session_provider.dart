@@ -42,7 +42,8 @@ class AuthSession {
       name: name ?? this.name,
       institutionId: institutionId ?? this.institutionId,
       role: role ?? this.role,
-      hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+      hasCompletedOnboarding:
+          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
     );
   }
 }
@@ -168,10 +169,18 @@ class AuthSessionNotifier extends StateNotifier<AuthSession?> {
   void clearSession() {
     state = null;
   }
+
+  /// Updates display name in-memory after a local profile save.
+  /// Call this after writing the updated name to Hive cache.
+  void updateName(String displayName) {
+    if (state == null) return;
+    state = state!.copyWith(name: displayName);
+  }
 }
 
 /// Provider for multi-tenant auth session
-final authSessionProvider = StateNotifierProvider<AuthSessionNotifier, AuthSession?>((ref) {
+final authSessionProvider =
+    StateNotifierProvider<AuthSessionNotifier, AuthSession?>((ref) {
   final hiveService = ref.watch(hiveServiceProvider);
   return AuthSessionNotifier(hiveService);
 });

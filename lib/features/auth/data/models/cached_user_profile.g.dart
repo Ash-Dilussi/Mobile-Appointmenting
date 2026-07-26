@@ -8,7 +8,7 @@ part of 'cached_user_profile.dart';
 
 class CachedUserProfileAdapter extends TypeAdapter<CachedUserProfile> {
   @override
-  final int typeId = 10;
+  final int typeId = 11;
 
   @override
   CachedUserProfile read(BinaryReader reader) {

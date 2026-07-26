@@ -3,16 +3,24 @@ import '../../domain/entities/auth_user.dart';
 
 part 'cached_user_profile.g.dart';
 
-@HiveType(typeId: 10)
+@HiveType(typeId: 11)
 class CachedUserProfile extends HiveObject {
-  @HiveField(0) final String uid;
-  @HiveField(1) final String email;
-  @HiveField(2) final String displayName;
-  @HiveField(3) final String? photoUrl;
-  @HiveField(4) final String roleString;
-  @HiveField(5) final String institutionId;
-  @HiveField(6) final bool isEmailVerified;
-  @HiveField(7) final int createdAtMs;
+  @HiveField(0)
+  final String uid;
+  @HiveField(1)
+  final String email;
+  @HiveField(2)
+  final String displayName;
+  @HiveField(3)
+  final String? photoUrl;
+  @HiveField(4)
+  final String roleString;
+  @HiveField(5)
+  final String institutionId;
+  @HiveField(6)
+  final bool isEmailVerified;
+  @HiveField(7)
+  final int createdAtMs;
 
   CachedUserProfile({
     required this.uid,

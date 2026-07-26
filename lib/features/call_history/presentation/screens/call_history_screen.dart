@@ -44,49 +44,51 @@ class CallHistoryScreen extends ConsumerWidget {
                 children: [
                   // All Calls Tab
                   ref.watch(allCallLogsProvider).when(
-                    data: (calls) {
-                      if (calls.isEmpty) {
-                        return const _EmptyState(
-                          icon: Icons.phone_outlined,
-                          message: 'No call history yet',
-                        );
-                      }
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        itemCount: calls.length,
-                        itemBuilder: (context, index) {
-                          return _CallHistoryCard(
-                            callLog: calls[index],
+                        data: (calls) {
+                          if (calls.isEmpty) {
+                            return const _EmptyState(
+                              icon: Icons.phone_outlined,
+                              message: 'No call history yet',
+                            );
+                          }
+                          return ListView.builder(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            itemCount: calls.length,
+                            itemBuilder: (context, index) {
+                              return _CallHistoryCard(
+                                callLog: calls[index],
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                  ),
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(child: Text('Error: $e')),
+                      ),
 
                   // Missed Calls Tab
                   ref.watch(missedCallsProvider).when(
-                    data: (calls) {
-                      if (calls.isEmpty) {
-                        return const _EmptyState(
-                          icon: Icons.phone_missed_outlined,
-                          message: 'No missed calls',
-                        );
-                      }
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        itemCount: calls.length,
-                        itemBuilder: (context, index) {
-                          return _MissedCallCard(
-                            callLog: calls[index],
+                        data: (calls) {
+                          if (calls.isEmpty) {
+                            return const _EmptyState(
+                              icon: Icons.phone_missed_outlined,
+                              message: 'No missed calls',
+                            );
+                          }
+                          return ListView.builder(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            itemCount: calls.length,
+                            itemBuilder: (context, index) {
+                              return _MissedCallCard(
+                                callLog: calls[index],
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                  ),
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(child: Text('Error: $e')),
+                      ),
                 ],
               ),
             ),
@@ -126,6 +128,14 @@ class _CallHistoryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
+    final db = ref.watch(homeHiveProvider);
+
+    // Resolve customer: prefer linked customerId, fall back to phone lookup
+    Customer? customer;
+    if (callLog.customerId != null) {
+      customer = db.getCustomerById(callLog.customerId!);
+    }
+    customer ??= db.getCustomerByPhone(callLog.phoneNumber);
 
     IconData icon;
     Color iconColor;
@@ -149,8 +159,21 @@ class _CallHistoryCard extends ConsumerWidget {
       statusText = callLog.direction;
     }
 
+    // Get initials for avatar
+    final displayName = customer?.name ?? callLog.phoneNumber;
+    final initials = customer != null && customer.name.isNotEmpty
+        ? customer.name
+            .split(' ')
+            .map((e) => e.isNotEmpty ? e[0] : '')
+            .take(2)
+            .join()
+            .toUpperCase()
+        : displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?';
+
     return PebbleContextMenuWrapper(
-      title: callLog.phoneNumber,
+      title: customer?.name ?? callLog.phoneNumber,
       actions: [
         PebbleContextAction(
           icon: Icons.call,
@@ -167,7 +190,19 @@ class _CallHistoryCard extends ConsumerWidget {
             );
           },
         ),
-        if (callLog.linkedAppointmentId == null)
+        if (customer != null && customer.id != null)
+          PebbleContextAction(
+            icon: Icons.person,
+            label: 'View Customer',
+            onTap: () {
+              final customerId = customer!.id!;
+              context.goNamed(
+                'customer-profile',
+                pathParameters: {'id': customerId.toString()},
+              );
+            },
+          )
+        else if (callLog.linkedAppointmentId == null)
           PebbleContextAction(
             icon: Icons.person_add,
             label: 'Add as Customer',
@@ -188,23 +223,48 @@ class _CallHistoryCard extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            // Initials avatar or call type icon
+            if (customer != null)
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.primaryContainer,
+                child: Text(
+                  initials,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
               ),
-              child: Icon(icon, color: iconColor, size: 24),
-            ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    callLog.phoneNumber,
-                    style: AppTypography.bodyLarge,
+                    customer?.name ?? callLog.phoneNumber,
+                    style: AppTypography.bodyLarge.copyWith(
+                      fontWeight: customer != null
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
                   ),
+                  if (customer != null)
+                    Text(
+                      callLog.phoneNumber,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.secondary,
+                      ),
+                    ),
                   const SizedBox(height: 2),
                   Text(
                     '$statusText • ${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
@@ -220,8 +280,6 @@ class _CallHistoryCard extends ConsumerWidget {
             ),
             InfoButton(
               onTap: () {
-                // For CallLog, info button shows call details
-                // Navigate to a call detail view or show a dialog
                 _showCallDetailsDialog(context, ref);
               },
             ),
@@ -250,11 +308,19 @@ class _CallHistoryCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _DetailRow(label: 'Direction', value: callLog.direction),
-            _DetailRow(label: 'Status', value: callLog.isMissed ? 'Missed' : 'Answered'),
-            _DetailRow(label: 'Date', value: DateFormat('MMM d, yyyy').format(callLog.timestamp)),
-            _DetailRow(label: 'Time', value: DateFormat('h:mm a').format(callLog.timestamp)),
+            _DetailRow(
+                label: 'Status',
+                value: callLog.isMissed ? 'Missed' : 'Answered'),
+            _DetailRow(
+                label: 'Date',
+                value: DateFormat('MMM d, yyyy').format(callLog.timestamp)),
+            _DetailRow(
+                label: 'Time',
+                value: DateFormat('h:mm a').format(callLog.timestamp)),
             if (callLog.durationSeconds > 0)
-              _DetailRow(label: 'Duration', value: _formatDuration(callLog.durationSeconds)),
+              _DetailRow(
+                  label: 'Duration',
+                  value: _formatDuration(callLog.durationSeconds)),
             if (callLog.followedUp)
               _DetailRow(label: 'Followed Up', value: 'Yes'),
           ],
@@ -340,6 +406,27 @@ class _MissedCallCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
+    final db = ref.watch(homeHiveProvider);
+
+    // Resolve customer: prefer linked customerId, fall back to phone lookup
+    Customer? customer;
+    if (callLog.customerId != null) {
+      customer = db.getCustomerById(callLog.customerId!);
+    }
+    customer ??= db.getCustomerByPhone(callLog.phoneNumber);
+
+    // Get initials for avatar
+    final displayName = customer?.name ?? callLog.phoneNumber;
+    final initials = customer != null && customer.name.isNotEmpty
+        ? customer.name
+            .split(' ')
+            .map((e) => e.isNotEmpty ? e[0] : '')
+            .take(2)
+            .join()
+            .toUpperCase()
+        : displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?';
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -353,27 +440,52 @@ class _MissedCallCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              // Initials avatar or call type icon
+              if (customer != null)
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppColors.primaryContainer,
+                  child: Text(
+                    initials,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.onPrimaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  ),
+                  child: const Icon(
+                    Icons.call_missed,
+                    color: AppColors.error,
+                    size: 24,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.call_missed,
-                  color: AppColors.error,
-                  size: 24,
-                ),
-              ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      callLog.phoneNumber,
-                      style: AppTypography.bodyLarge,
+                      customer?.name ?? callLog.phoneNumber,
+                      style: AppTypography.bodyLarge.copyWith(
+                        fontWeight: customer != null
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
                     ),
+                    if (customer != null)
+                      Text(
+                        callLog.phoneNumber,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.secondary,
+                        ),
+                      ),
                     Text(
                       '${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
                       style: AppTypography.bodySmall,
@@ -475,7 +587,8 @@ class _ImportCallSheet extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: const BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

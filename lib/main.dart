@@ -1,18 +1,30 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'app.dart';
+import 'core/firebase/firebase_options.dart';
 import 'core/logging/logger_service.dart';
+import 'core/database/hive_service.dart';
+import 'features/call_log/providers/call_log_providers.dart';
+import 'features/subscription/data/subscription_repository.dart';
+import 'features/subscription/data/subscription_repository_impl.dart';
+import 'core/entitlements/entitlement_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // logger must be ready before any error hooks
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize Hive before accessing any boxes
+  await HiveService.instance.init();
+
   await logger.init();
   logger.info('Startup', 'Logger initialized');
 
-  // Error hook needs logger; set before runApp
   FlutterError.onError = (details) {
     logger.error(
       'FlutterError',
@@ -23,13 +35,11 @@ void main() async {
     FlutterError.presentError(details);
   };
 
-  // Must precede first frame to avoid orientation flicker
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Must precede first frame to avoid status bar flicker
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -39,12 +49,26 @@ void main() async {
     ),
   );
 
-  logger.info('Startup', 'Calling runApp — heavy init moves to AppInitNotifier');
+  logger.info(
+      'Startup', 'Calling runApp — heavy init moves to AppInitNotifier');
 
-  // runApp called with NO Firebase/Hive/seed awaits above
   runApp(
-    const ProviderScope(
-      child: App(),
+    ProviderScope(
+      overrides: [
+        // Existing override
+        activeCallStateProvider,
+
+        // Wire concrete SubscriptionRepository
+        // The abstract provider throws UnimplementedError by default;
+        // this override provides the real implementation.
+        subscriptionRepositoryProvider.overrideWithValue(
+          SubscriptionRepositoryImpl(
+            firestore: FirebaseFirestore.instance,
+            subscriptionBox: HiveService.instance.subscriptionBox,
+          ),
+        ),
+      ],
+      child: const App(),
     ),
   );
 }

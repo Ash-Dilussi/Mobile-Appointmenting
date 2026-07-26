@@ -1,105 +1,137 @@
+// firestore.rules
+//
+// Server-side entitlement enforcement.
+// These rules are the security boundary — the client-side FeatureGate is UX only.
+//
+// Deploy with: firebase deploy --only firestore:rules
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
+    // ── Helper functions ───────────────────────────────────────────────────
+
+    function isAuthenticated() {
       return request.auth != null;
     }
 
-    function callerProfile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function isInstitutionMember(institutionId) {
+      // User's custom claim must carry their institutionId
+      // Set this in your Cloud Function after user creation / institution link.
+      return isAuthenticated() &&
+             request.auth.token.institutionId == institutionId;
     }
 
-    function callerInstitutionId() {
-      return callerProfile().institutionId;
+    function isInstitutionOwner(institutionId) {
+      return isInstitutionMember(institutionId) &&
+             request.auth.token.role == 'owner';
     }
 
-    function callerRole() {
-      return callerProfile().role;
+    function getSubscription(institutionId) {
+      return get(/databases/$(database)/documents/institutions/$(institutionId)/subscription/plan).data;
     }
 
-    function isSameInstitution(institutionId) {
-      return isSignedIn() && callerInstitutionId() == institutionId;
+    function hasTier(institutionId, requiredTier) {
+      let sub = getSubscription(institutionId);
+      // Tier hierarchy: enterprise > pro > free
+      // 'enterprise' satisfies both 'pro' and 'enterprise' requirements.
+      if (requiredTier == 'free') {
+        return true; // everyone has free
+      }
+      if (requiredTier == 'pro') {
+        return sub.tier == 'pro' || sub.tier == 'enterprise';
+      }
+      if (requiredTier == 'enterprise') {
+        return sub.tier == 'enterprise';
+      }
+      return false;
     }
 
-    function isOwnerOf(institutionId) {
-      return isSameInstitution(institutionId) && callerRole() == 'owner';
+    function isNotExpired(institutionId) {
+      let sub = getSubscription(institutionId);
+      // If no expiresAt field, treat as non-expiring (lifetime / manual plan)
+      return !('expiresAt' in sub) ||
+             sub.expiresAt == null ||
+             sub.expiresAt > request.time;
     }
 
-    // users/{uid}
-    match /users/{uid} {
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    function hasActiveProOrAbove(institutionId) {
+      return hasTier(institutionId, 'pro') && isNotExpired(institutionId);
     }
 
-    // institutions/{institutionId}
+    function hasActiveEnterprise(institutionId) {
+      return hasTier(institutionId, 'enterprise') && isNotExpired(institutionId);
+    }
+
+    // ── Institution document ───────────────────────────────────────────────
+
     match /institutions/{institutionId} {
-      allow read: if isSameInstitution(institutionId);
-      allow write: if isOwnerOf(institutionId);
+      allow read: if isInstitutionMember(institutionId);
+      allow write: if isInstitutionOwner(institutionId);
 
-      match /officers/{officerUid} {
-        allow read: if isSameInstitution(institutionId);
-        allow write: if isOwnerOf(institutionId);
+      // ── Subscription sub-document (read-only for clients) ───────────────
+      // Only Cloud Functions (admin SDK) may write to this document.
+      // Clients read it to display plan info in the UI.
+      match /subscription/plan {
+        allow read: if isInstitutionMember(institutionId);
+        allow write: if false; // Cloud Function only (admin SDK bypasses rules)
+      }
+
+      // ── Call recordings (Pro+ feature) ─────────────────────────────────
+      match /recordings/{recordingId} {
+        allow read, write: if isInstitutionMember(institutionId)
+                           && hasActiveProOrAbove(institutionId);
+      }
+
+      // ── Analytics / reports (Pro+ feature) ─────────────────────────────
+      match /analytics/{docId} {
+        allow read: if isInstitutionMember(institutionId)
+                    && hasActiveProOrAbove(institutionId);
+        allow write: if false; // Cloud Functions only
+      }
+
+      // ── Data exports (Pro+ feature) ─────────────────────────────────────
+      match /exports/{exportId} {
+        allow create: if isInstitutionMember(institutionId)
+                      && hasActiveProOrAbove(institutionId);
+        allow read:   if isInstitutionMember(institutionId)
+                      && hasActiveProOrAbove(institutionId);
+        allow delete: if isInstitutionOwner(institutionId);
+        allow update: if false; // immutable once created
+      }
+
+      // ── API keys (Enterprise feature) ──────────────────────────────────
+      match /apiKeys/{keyId} {
+        allow read, write: if isInstitutionOwner(institutionId)
+                           && hasActiveEnterprise(institutionId);
+      }
+
+      // ── General institution data (free — all members) ───────────────────
+      match /callLogs/{logId} {
+        allow read, write: if isInstitutionMember(institutionId);
+      }
+
+      match /appointments/{apptId} {
+        allow read, write: if isInstitutionMember(institutionId);
+      }
+
+      // ── Staff members (multiUser is Pro+, but owners can always manage) ─
+      match /members/{memberId} {
+        allow read:   if isInstitutionMember(institutionId);
+        allow create,
+              delete: if isInstitutionOwner(institutionId)
+                      && hasActiveProOrAbove(institutionId);
+        allow update: if isInstitutionOwner(institutionId);
       }
     }
 
-    // Top-level collections with institutionId field-based isolation
+    // ── User profiles ──────────────────────────────────────────────────────
 
-    // customers/{customerId}
-    match /customers/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-    }
-
-    // services/{serviceId}
-    match /services/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-    }
-
-    // appointments/{appointmentId}
-    match /appointments/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-    }
-
-    // call_logs/{callLogId}
-    match /call_logs/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      // Call logs are append-only - no delete allowed
-    }
-
-    // service_stations/{stationId}
-    match /service_stations/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isOwnerOf(callerInstitutionId());
-    }
-
-    // appointment_services/{docId}
-    match /appointment_services/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-    }
-
-    // leave_requests/{leaveRequestId}
-    match /leave_requests/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update: if isOwnerOf(callerInstitutionId());
-      allow delete: if isOwnerOf(callerInstitutionId());
-    }
-
-    // sync_queue/{syncItemId}
-    match /sync_queue/{docId} {
-      allow read: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
-      allow create: if isSignedIn() && request.resource.data.institutionId == callerInstitutionId();
-      allow update, delete: if isSignedIn() && resource.data.institutionId == callerInstitutionId();
+    match /users/{userId} {
+      allow read:   if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if false; // soft-delete via Cloud Function only
     }
   }
 }

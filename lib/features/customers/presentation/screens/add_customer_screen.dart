@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../core/utils/phone_number_utils.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class AddCustomerScreen extends ConsumerStatefulWidget {
@@ -49,6 +52,82 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
       _emailController.text = customer.email ?? '';
       _addressController.text = customer.address ?? '';
       _notesController.text = customer.notes ?? '';
+    }
+  }
+
+  Future<void> _importFromContacts() async {
+    // Request contacts permission
+    final status = await Permission.contacts.request();
+
+    if (status.isDenied) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Contact permission is required to import contacts'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (status.isPermanentlyDenied) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text(
+              'Contact permission is permanently denied. Please enable it in Settings.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    // Open native contact picker
+    try {
+      final contact = await FlutterContacts.openExternalPick();
+      if (contact != null) {
+        setState(() {
+          // Set display name
+          _nameController.text = contact.displayName;
+
+          // Set first phone number (normalized for display consistency)
+          if (contact.phones.isNotEmpty) {
+            final rawPhone = contact.phones.first.number;
+            _phoneController.text = normalizePhoneNumber(rawPhone);
+          }
+
+          // Set first email
+          if (contact.emails.isNotEmpty) {
+            _emailController.text = contact.emails.first.address;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing contact: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -142,12 +221,12 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.goNamed('customers');
-          }
-        },
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed('customers');
+            }
+          },
         ),
         title: Text(widget.isEditMode ? 'Edit Customer' : 'Add Customer'),
         centerTitle: true,
@@ -159,6 +238,16 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Import from Contacts button (only in add mode)
+              if (!widget.isEditMode)
+                OutlinedButton.icon(
+                  onPressed: _importFromContacts,
+                  icon: const Icon(Icons.contacts_outlined),
+                  label: const Text('Import from Contacts'),
+                ),
+
+              if (!widget.isEditMode) const SizedBox(height: AppSpacing.lg),
+
               // Name
               TextFormField(
                 controller: _nameController,
@@ -253,7 +342,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                           color: AppColors.onPrimaryContainer,
                         ),
                       )
-                    : Text(widget.isEditMode ? 'Update Customer' : 'Save Customer'),
+                    : Text(widget.isEditMode
+                        ? 'Update Customer'
+                        : 'Save Customer'),
               ),
             ],
           ),
