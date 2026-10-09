@@ -9,6 +9,8 @@
 // This selects a bool, so the widget only rebuilds when that specific feature
 // changes — not on any other entitlement state mutation.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/subscription/data/subscription_repository.dart';
@@ -57,16 +59,14 @@ class EntitlementNotifier extends Notifier<EntitlementState> {
 
   // ── Bootstrap (called from AppInitNotifier step 5) ─────────────────────
 
-  /// Resolves the plan for [institutionId] using a cache-first strategy:
-  ///   1. Hive cache → emit immediately (instant, works offline)
-  ///   2. Firestore  → update Hive + re-emit
-  ///   3. On any failure → keep last emitted state or fall back to free tier
-  /// MUST NEVER rethrow — free tier is always the safe fallback.
+  /// Resolves the startup plan for [institutionId] using a cache-first strategy.
+  /// The returned future completes after the local cache is read; the remote
+  /// refresh continues in the background so network latency never blocks app
+  /// navigation.
   Future<void> bootstrap({required String institutionId}) async {
     final repo = ref.read(subscriptionRepositoryProvider);
 
     try {
-      // 1. Hive cache — instant, offline-safe
       final cached = await repo.getCachedPlan(institutionId: institutionId);
       if (cached != null) {
         state = _planToState(cached);
@@ -75,9 +75,26 @@ class EntitlementNotifier extends Notifier<EntitlementState> {
           'Entitlement',
           'Cache hit: ${cached.tier.displayName} for $institutionId',
         );
+      } else {
+        state = const EntitlementState(tier: PlanTier.free);
       }
+    } catch (e, st) {
+      LoggerService.instance.log(
+        LogLevel.error,
+        'Entitlement',
+        'Cache bootstrap error for $institutionId — defaulting to free',
+        error: e,
+        stackTrace: st,
+      );
+      state = const EntitlementState(tier: PlanTier.free);
+    }
 
-      // 2. Firestore fresh — update state and cache
+    unawaited(_refreshRemote(institutionId: institutionId));
+  }
+
+  Future<void> _refreshRemote({required String institutionId}) async {
+    final repo = ref.read(subscriptionRepositoryProvider);
+    try {
       final fresh = await repo.fetchPlan(institutionId: institutionId);
       state = _planToState(fresh);
       LoggerService.instance.log(
@@ -87,20 +104,13 @@ class EntitlementNotifier extends Notifier<EntitlementState> {
             '${fresh.expiresAt != null ? " (expires ${fresh.expiresAt})" : ""}',
       );
     } catch (e, st) {
-      // Network failure or Firestore error — do NOT rethrow.
-      // If we already emitted a cached state above, keep it.
-      // If we have nothing, fall back to free tier.
       LoggerService.instance.log(
         LogLevel.error,
         'Entitlement',
-        'Bootstrap error for $institutionId — '
-            '${state.isLoading ? "defaulting to free" : "keeping cached state"}',
+        'Remote refresh failed for $institutionId — keeping local state',
         error: e,
         stackTrace: st,
       );
-      if (state.isLoading) {
-        state = const EntitlementState(tier: PlanTier.free);
-      }
     }
   }
 
@@ -141,7 +151,7 @@ class EntitlementNotifier extends Notifier<EntitlementState> {
 
   /// Re-bootstrap after session change (e.g. user switches institution).
   Future<void> refresh({required String institutionId}) =>
-      bootstrap(institutionId: institutionId);
+      _refreshRemote(institutionId: institutionId);
 
   EntitlementState _planToState(SubscriptionPlan plan) {
     return EntitlementState(

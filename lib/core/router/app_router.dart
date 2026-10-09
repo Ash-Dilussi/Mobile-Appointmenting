@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../config/release_scope.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/entrance_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
-import '../../features/auth/presentation/screens/create_company_placeholder_screen.dart';
 import '../../features/auth/presentation/providers/app_launch_provider.dart';
+import '../../features/auth/presentation/providers/auth_session_provider.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/main_shell.dart';
 import '../../features/calendar/presentation/screens/calendar_screen.dart';
@@ -21,6 +22,7 @@ import '../../features/customers/presentation/screens/add_customer_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/profile_setup_screen.dart';
 import '../../features/settings/presentation/screens/change_password_screen.dart';
+import '../../features/settings/presentation/screens/delete_account_screen.dart';
 import '../../features/services/presentation/screens/service_management_screen.dart';
 import '../../features/services/presentation/screens/add_service_screen.dart';
 import '../../features/services/presentation/screens/service_detail_screen.dart';
@@ -32,11 +34,14 @@ import '../../features/settings/presentation/screens/edit_company_screen.dart';
 import '../../features/settings/presentation/screens/operator_profile_screen.dart';
 import '../../features/settings/presentation/screens/leave_requests_screen.dart';
 import '../../features/settings/presentation/screens/create_company_screen.dart';
+import '../../features/settings/presentation/screens/business_setup_screen.dart';
 import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/booking/presentation/screens/booking_confirmation_screen.dart';
 import '../../features/booking/presentation/screens/appointment_detail_screen.dart';
 import '../../features/calendar/presentation/screens/full_calendar_screen.dart';
 import '../../features/subscription/presentation/upgrade_screen.dart';
+import '../../features/insights/presentation/screens/insights_screen.dart';
+import '../../shared/screens/coming_soon_screen.dart';
 
 // Navigation shell key
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -47,9 +52,6 @@ int? _parseId(String? value) => value != null ? int.tryParse(value) : null;
 
 // Router provider
 final routerProvider = Provider<GoRouter>((ref) {
-  // Watch appLaunchProvider to trigger redirects when auth state changes
-  ref.watch(appLaunchProvider);
-
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
@@ -107,13 +109,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         name: 'splash',
         builder: (context, state) => const SplashScreen(),
-      ),
-
-      // Create company route (for new users)
-      GoRoute(
-        path: '/create-company',
-        name: 'create-company-placeholder',
-        builder: (context, state) => const CreateCompanyPlaceholderScreen(),
       ),
 
       // Main app shell with bottom navigation
@@ -258,9 +253,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const StaffManagementScreen(),
       ),
       GoRoute(
+        path: '/insights',
+        name: 'insights',
+        builder: (context, state) => InsightsScreen(
+          canViewOwnerSections: ref.read(authSessionProvider)?.isOwner ?? false,
+        ),
+      ),
+      GoRoute(
         path: '/company/edit',
         name: 'edit-company',
         builder: (context, state) => const EditCompanyScreen(),
+      ),
+      GoRoute(
+        path: '/business/setup',
+        name: 'business-setup',
+        builder: (context, state) => const BusinessSetupScreen(),
       ),
       GoRoute(
         path: '/company/create',
@@ -285,11 +292,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'booking',
         builder: (context, state) {
           final phone = state.uri.queryParameters['phone'];
-          final callLogId = state.uri.queryParameters['callLogId'];
+          final customerId = _parseId(
+            state.uri.queryParameters['customerId'],
+          );
+          final callLogId = _parseId(state.uri.queryParameters['callLogId']);
+          final serviceId = _parseId(state.uri.queryParameters['serviceId']);
           final dateStr = state.uri.queryParameters['date'];
           return BookingScreen(
             prefilledPhone: phone,
-            callLogId: callLogId != null ? int.parse(callLogId) : null,
+            prefilledCustomerId: customerId,
+            callLogId: callLogId,
+            prefilledServiceId: serviceId,
             prefilledDate: dateStr != null ? DateTime.tryParse(dateStr) : null,
           );
         },
@@ -332,6 +345,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ChangePasswordScreen(),
       ),
       GoRoute(
+        path: '/delete-account',
+        name: 'delete-account',
+        builder: (context, state) => const DeleteAccountScreen(),
+      ),
+      GoRoute(
         path: '/calendar/full',
         name: 'full-calendar',
         builder: (context, state) {
@@ -342,16 +360,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           return FullCalendarScreen(initialDate: date);
         },
       ),
-      GoRoute(
-        path: '/upgrade',
-        name: 'upgrade',
-        builder: (context, state) => const UpgradeScreen(),
-      ),
+      if (ReleaseScope.developmentOnlyDestinationsEnabled)
+        GoRoute(
+          path: '/upgrade',
+          name: 'upgrade',
+          builder: (context, state) => const UpgradeScreen(),
+        ),
       GoRoute(
         path: '/call-log',
         name: 'call-log',
         builder: (context, state) => const CallLogScreen(),
       ),
+      if (ReleaseScope.developmentOnlyDestinationsEnabled)
+        GoRoute(
+          path: '/coming-soon',
+          name: 'coming-soon',
+          builder: (context, state) => ComingSoonScreen(
+            featureName: state.uri.queryParameters['feature'],
+          ),
+        ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(

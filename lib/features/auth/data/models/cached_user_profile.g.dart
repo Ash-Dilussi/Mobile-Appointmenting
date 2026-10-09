@@ -25,13 +25,14 @@ class CachedUserProfileAdapter extends TypeAdapter<CachedUserProfile> {
       institutionId: fields[5] as String,
       isEmailVerified: fields[6] as bool,
       createdAtMs: fields[7] as int,
+      shouldPromptPasswordChange: fields[8] == null ? false : fields[8] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, CachedUserProfile obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.uid)
       ..writeByte(1)
@@ -47,7 +48,9 @@ class CachedUserProfileAdapter extends TypeAdapter<CachedUserProfile> {
       ..writeByte(6)
       ..write(obj.isEmailVerified)
       ..writeByte(7)
-      ..write(obj.createdAtMs);
+      ..write(obj.createdAtMs)
+      ..writeByte(8)
+      ..write(obj.shouldPromptPasswordChange);
   }
 
   @override

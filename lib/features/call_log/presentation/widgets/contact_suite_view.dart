@@ -6,8 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/database/collections/customer_note.dart';
 import '../../data/models/call_log_entry.dart';
 import '../../providers/call_log_providers.dart';
+import '../../../customers/presentation/widgets/customer_note_card.dart';
 import 'appointment_history_tile.dart';
 
 class ContactSuiteView extends ConsumerWidget {
@@ -228,7 +230,7 @@ class _ContactHeader extends StatelessWidget {
 }
 
 class _NotesSection extends StatelessWidget {
-  final String? notes;
+  final List<CustomerNote> notes;
   final int? customerId;
 
   const _NotesSection({
@@ -238,6 +240,7 @@ class _NotesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -261,14 +264,18 @@ class _NotesSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        Text(
-          notes ?? 'No notes',
-          style: AppTypography.bodyMedium.copyWith(
-            color: notes != null ? null : AppColors.secondary,
-          ),
-          maxLines: 4,
-          softWrap: true,
-        ),
+        if (notes.isEmpty)
+          Text(
+            'No notes',
+            style: AppTypography.bodyMedium.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          )
+        else
+          for (var index = 0; index < notes.length; index++) ...[
+            CustomerNoteCard(note: notes[index]),
+            if (index < notes.length - 1) const SizedBox(height: AppSpacing.sm),
+          ],
       ],
     );
   }
@@ -307,7 +314,7 @@ class _AppointmentHistorySection extends StatelessWidget {
 
         // Upcoming appointments
         if (upcomingAppointments.isNotEmpty) ...[
-          _SectionHeader(
+          const _SectionHeader(
             title: 'Upcoming',
             color: AppColors.primary,
           ),
@@ -318,7 +325,7 @@ class _AppointmentHistorySection extends StatelessWidget {
 
         // Past appointments
         if (pastAppointments.isNotEmpty) ...[
-          _SectionHeader(
+          const _SectionHeader(
             title: 'Past',
             color: AppColors.secondary,
           ),

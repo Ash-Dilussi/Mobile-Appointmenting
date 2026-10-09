@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../../shared/widgets/info_button.dart';
+import '../../../../shared/widgets/app_badge.dart';
 import '../../../../shared/widgets/pebble_context_menu.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../application/app_call_service.dart';
 import '../providers/call_history_provider.dart';
 
 class CallHistoryScreen extends ConsumerWidget {
@@ -18,17 +19,18 @@ class CallHistoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colors.surface,
         appBar: AppBar(
           title: const Text('Call History'),
           centerTitle: true,
           bottom: TabBar(
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.secondary,
-            indicatorColor: AppColors.primary,
+            labelColor: colors.primary,
+            unselectedLabelColor: colors.onSurfaceVariant,
+            indicatorColor: colors.primary,
             tabs: const [
               Tab(text: 'All Calls'),
               Tab(text: 'Missed'),
@@ -37,8 +39,39 @@ class CallHistoryScreen extends ConsumerWidget {
         ),
         body: Column(
           children: [
-            // Privacy notice for call recording
-            const _RecordingPrivacyNotice(),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                0,
+              ),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: colors.secondaryContainer,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colors.onSecondaryContainer,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Calls initiated through Bookly appear here. Calls made or received outside the app are not included.',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: colors.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: TabBarView(
                 children: [
@@ -63,7 +96,10 @@ class CallHistoryScreen extends ConsumerWidget {
                         },
                         loading: () =>
                             const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Center(child: Text('Error: $e')),
+                        error: (_, __) => const _EmptyState(
+                          icon: Icons.error_outline,
+                          message: 'Call activity is unavailable right now',
+                        ),
                       ),
 
                   // Missed Calls Tab
@@ -87,7 +123,11 @@ class CallHistoryScreen extends ConsumerWidget {
                         },
                         loading: () =>
                             const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Center(child: Text('Error: $e')),
+                        error: (_, __) => const _EmptyState(
+                          icon: Icons.error_outline,
+                          message:
+                              'Missed-call activity is unavailable right now',
+                        ),
                       ),
                 ],
               ),
@@ -96,22 +136,10 @@ class CallHistoryScreen extends ConsumerWidget {
         ),
         floatingActionButton: FloatingActionButton.extended(
           heroTag: 'callHistoryFab',
-          onPressed: () => _showImportCallSheet(context),
+          onPressed: () => context.pushNamed('booking'),
           icon: const Icon(Icons.add),
           label: const Text('New Appointment'),
         ),
-      ),
-    );
-  }
-
-  void _showImportCallSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => _ImportCallSheet(
-        onCallSelected: (phone) {
-          Navigator.pop(context);
-          context.goNamed('booking', queryParameters: {'phone': phone});
-        },
       ),
     );
   }
@@ -129,35 +157,37 @@ class _CallHistoryCard extends ConsumerWidget {
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
     final db = ref.watch(homeHiveProvider);
-
     // Resolve customer: prefer linked customerId, fall back to phone lookup
     Customer? customer;
     if (callLog.customerId != null) {
       customer = db.getCustomerById(callLog.customerId!);
     }
-    customer ??= db.getCustomerByPhone(callLog.phoneNumber);
-
-    IconData icon;
-    Color iconColor;
-    String statusText;
-
-    if (callLog.direction == 'incoming') {
-      icon = Icons.call_received;
-      iconColor = AppColors.success;
-      statusText = 'Incoming';
-    } else if (callLog.isMissed) {
-      icon = Icons.call_missed;
-      iconColor = AppColors.error;
-      statusText = 'Missed';
-    } else if (callLog.direction == 'outgoing') {
-      icon = Icons.call_made;
-      iconColor = AppColors.ongoing;
-      statusText = 'Outgoing';
-    } else {
-      icon = Icons.phone;
-      iconColor = AppColors.secondary;
-      statusText = callLog.direction;
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
+    if (institutionId != null) {
+      customer ??= db.getCustomerByPhoneForInstitution(
+        callLog.phoneNumber,
+        institutionId,
+      );
     }
+
+    final colors = Theme.of(context).colorScheme;
+    final isAppInitiated = callLog.origin == CallLog.originAppInitiated;
+    final status = isAppInitiated
+        ? callStatusPresentation('initiated', colors)
+        : callLogStatusPresentation(
+            isMissed: callLog.isMissed,
+            direction: callLog.direction,
+            colors: colors,
+          );
+    final icon = isAppInitiated
+        ? Icons.call_made
+        : callLog.isMissed
+            ? Icons.call_missed
+            : switch (callLog.direction) {
+                'incoming' => Icons.call_received,
+                'outgoing' => Icons.call_made,
+                _ => Icons.phone,
+              };
 
     // Get initials for avatar
     final displayName = customer?.name ?? callLog.phoneNumber;
@@ -178,7 +208,7 @@ class _CallHistoryCard extends ConsumerWidget {
         PebbleContextAction(
           icon: Icons.call,
           label: 'Call Back',
-          onTap: () => _handleCallBack(context, ref),
+          onTap: () => _handleCallBack(context, ref, customer?.id),
         ),
         PebbleContextAction(
           icon: Icons.event,
@@ -186,7 +216,10 @@ class _CallHistoryCard extends ConsumerWidget {
           onTap: () {
             context.goNamed(
               'booking',
-              queryParameters: {'phone': callLog.phoneNumber},
+              queryParameters: {
+                'phone': callLog.phoneNumber,
+                if (callLog.id != null) 'callLogId': callLog.id.toString(),
+              },
             );
           },
         ),
@@ -218,7 +251,7 @@ class _CallHistoryCard extends ConsumerWidget {
         margin: const EdgeInsets.only(bottom: AppSpacing.md),
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: colors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         ),
         child: Row(
@@ -227,11 +260,11 @@ class _CallHistoryCard extends ConsumerWidget {
             if (customer != null)
               CircleAvatar(
                 radius: 20,
-                backgroundColor: AppColors.primaryContainer,
+                backgroundColor: colors.primaryContainer,
                 child: Text(
                   initials,
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.onPrimaryContainer,
+                    color: colors.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -240,10 +273,14 @@ class _CallHistoryCard extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
+                  color: status.backgroundColor,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                 ),
-                child: Icon(icon, color: iconColor, size: 24),
+                child: Icon(
+                  icon,
+                  color: status.foregroundColor,
+                  size: 24,
+                ),
               ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -258,29 +295,25 @@ class _CallHistoryCard extends ConsumerWidget {
                           : FontWeight.normal,
                     ),
                   ),
-                  if (customer != null)
-                    Text(
-                      callLog.phoneNumber,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.secondary,
-                      ),
-                    ),
                   const SizedBox(height: 2),
-                  Text(
-                    '$statusText • ${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
-                    style: AppTypography.bodySmall,
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      AppBadge(presentation: status, compact: true),
+                      Text(
+                        '${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
+                        style: AppTypography.bodySmall,
+                      ),
+                    ],
                   ),
-                  if (callLog.durationSeconds > 0)
-                    Text(
-                      'Duration: ${_formatDuration(callLog.durationSeconds)}',
-                      style: AppTypography.bodySmall,
-                    ),
                 ],
               ),
             ),
             InfoButton(
               onTap: () {
-                _showCallDetailsDialog(context, ref);
+                _showCallDetailsDialog(context, ref, customer?.id);
               },
             ),
           ],
@@ -298,7 +331,11 @@ class _CallHistoryCard extends ConsumerWidget {
     return '${remainingSeconds}s';
   }
 
-  void _showCallDetailsDialog(BuildContext context, WidgetRef ref) {
+  void _showCallDetailsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    int? customerId,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -310,7 +347,11 @@ class _CallHistoryCard extends ConsumerWidget {
             _DetailRow(label: 'Direction', value: callLog.direction),
             _DetailRow(
                 label: 'Status',
-                value: callLog.isMissed ? 'Missed' : 'Answered'),
+                value: callLog.origin == CallLog.originAppInitiated
+                    ? 'Call initiated'
+                    : callLog.isMissed
+                        ? 'Missed'
+                        : 'Answered'),
             _DetailRow(
                 label: 'Date',
                 value: DateFormat('MMM d, yyyy').format(callLog.timestamp)),
@@ -322,7 +363,7 @@ class _CallHistoryCard extends ConsumerWidget {
                   label: 'Duration',
                   value: _formatDuration(callLog.durationSeconds)),
             if (callLog.followedUp)
-              _DetailRow(label: 'Followed Up', value: 'Yes'),
+              const _DetailRow(label: 'Followed Up', value: 'Yes'),
           ],
         ),
         actions: [
@@ -333,7 +374,7 @@ class _CallHistoryCard extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              _handleCallBack(context, ref);
+              _handleCallBack(context, ref, customerId);
             },
             child: const Text('Call Back'),
           ),
@@ -342,21 +383,41 @@ class _CallHistoryCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleCallBack(BuildContext context, WidgetRef ref) async {
+  Future<void> _handleCallBack(
+    BuildContext context,
+    WidgetRef ref,
+    int? customerId,
+  ) async {
     final phoneNumber = callLog.phoneNumber;
     final uri = Uri(scheme: 'tel', path: phoneNumber);
 
-    if (await canLaunchUrl(uri)) {
-      // Mark as followed up before calling
-      final db = ref.read(homeHiveProvider);
-      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
-      await launchUrl(uri);
-    } else {
-      if (context.mounted) {
+    if (customerId != null) {
+      final result =
+          await ref.read(appCallServiceProvider).initiateCustomerCall(
+                customerId: customerId,
+                phoneNumber: phoneNumber,
+              );
+      if (result == AppCallLaunchResult.launched && callLog.id != null) {
+        final db = ref.read(homeHiveProvider);
+        await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+      }
+      final message = result.failureMessage;
+      if (message != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open phone dialer')),
+          SnackBar(content: Text(message)),
         );
       }
+      return;
+    }
+
+    final opened = await openExternalPhoneDialer(uri);
+    if (opened && callLog.id != null) {
+      final db = ref.read(homeHiveProvider);
+      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+    } else if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open phone dialer')),
+      );
     }
   }
 }
@@ -369,6 +430,7 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Row(
@@ -379,7 +441,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               '$label:',
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
           ),
@@ -404,16 +466,27 @@ class _MissedCallCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final timeFormat = DateFormat('h:mm a');
     final dateFormat = DateFormat('MMM d');
     final db = ref.watch(homeHiveProvider);
+    final missedStatus = callStatusPresentation(
+      'missed',
+      Theme.of(context).colorScheme,
+    );
 
     // Resolve customer: prefer linked customerId, fall back to phone lookup
     Customer? customer;
     if (callLog.customerId != null) {
       customer = db.getCustomerById(callLog.customerId!);
     }
-    customer ??= db.getCustomerByPhone(callLog.phoneNumber);
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
+    if (institutionId != null) {
+      customer ??= db.getCustomerByPhoneForInstitution(
+        callLog.phoneNumber,
+        institutionId,
+      );
+    }
 
     // Get initials for avatar
     final displayName = customer?.name ?? callLog.phoneNumber;
@@ -432,7 +505,7 @@ class _MissedCallCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: colors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       ),
       child: Column(
@@ -444,11 +517,11 @@ class _MissedCallCard extends ConsumerWidget {
               if (customer != null)
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: AppColors.primaryContainer,
+                  backgroundColor: colors.primaryContainer,
                   child: Text(
                     initials,
                     style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.onPrimaryContainer,
+                      color: colors.onPrimaryContainer,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -457,12 +530,12 @@ class _MissedCallCard extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.sm),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
+                    color: missedStatus.backgroundColor,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.call_missed,
-                    color: AppColors.error,
+                    color: missedStatus.foregroundColor,
                     size: 24,
                   ),
                 ),
@@ -479,16 +552,20 @@ class _MissedCallCard extends ConsumerWidget {
                             : FontWeight.normal,
                       ),
                     ),
-                    if (customer != null)
-                      Text(
-                        callLog.phoneNumber,
-                        style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.secondary,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        AppBadge(
+                          presentation: missedStatus,
+                          compact: true,
                         ),
-                      ),
-                    Text(
-                      '${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
-                      style: AppTypography.bodySmall,
+                        Text(
+                          '${dateFormat.format(callLog.timestamp)} at ${timeFormat.format(callLog.timestamp)}',
+                          style: AppTypography.bodySmall,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -500,7 +577,7 @@ class _MissedCallCard extends ConsumerWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _handleCallBack(context, ref),
+                  onPressed: () => _handleCallBack(context, ref, customer?.id),
                   icon: const Icon(Icons.call, size: 18),
                   label: const Text('Call Back'),
                 ),
@@ -511,7 +588,11 @@ class _MissedCallCard extends ConsumerWidget {
                   onPressed: () {
                     context.goNamed(
                       'booking',
-                      queryParameters: {'phone': callLog.phoneNumber},
+                      queryParameters: {
+                        'phone': callLog.phoneNumber,
+                        if (callLog.id != null)
+                          'callLogId': callLog.id.toString(),
+                      },
                     );
                   },
                   icon: const Icon(Icons.event, size: 18),
@@ -525,20 +606,41 @@ class _MissedCallCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleCallBack(BuildContext context, WidgetRef ref) async {
+  Future<void> _handleCallBack(
+    BuildContext context,
+    WidgetRef ref,
+    int? customerId,
+  ) async {
     final phoneNumber = callLog.phoneNumber;
     final uri = Uri(scheme: 'tel', path: phoneNumber);
 
-    if (await canLaunchUrl(uri)) {
-      final db = ref.read(homeHiveProvider);
-      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
-      await launchUrl(uri);
-    } else {
-      if (context.mounted) {
+    if (customerId != null) {
+      final result =
+          await ref.read(appCallServiceProvider).initiateCustomerCall(
+                customerId: customerId,
+                phoneNumber: phoneNumber,
+              );
+      if (result == AppCallLaunchResult.launched && callLog.id != null) {
+        final db = ref.read(homeHiveProvider);
+        await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+      }
+      final message = result.failureMessage;
+      if (message != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open phone dialer')),
+          SnackBar(content: Text(message)),
         );
       }
+      return;
+    }
+
+    final opened = await openExternalPhoneDialer(uri);
+    if (opened && callLog.id != null) {
+      final db = ref.read(homeHiveProvider);
+      await db.updateCallLog(callLog.id!, callLog..followedUp = true);
+    } else if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open phone dialer')),
+      );
     }
   }
 }
@@ -554,6 +656,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -561,123 +664,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             icon,
             size: 64,
-            color: AppColors.secondary.withOpacity(0.5),
+            color: colors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
             message,
             style: AppTypography.bodyLarge.copyWith(
-              color: AppColors.secondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ImportCallSheet extends StatelessWidget {
-  final Function(String phone) onCallSelected;
-
-  const _ImportCallSheet({required this.onCallSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.outline.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'New Appointment',
-            style: AppTypography.titleLarge,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Enter a phone number to book an appointment',
-            style: AppTypography.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          TextField(
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              hintText: '+1 234 567 8900',
-              prefixIcon: Icon(Icons.phone),
-            ),
-            onSubmitted: (value) {
-              if (value.isNotEmpty) {
-                onCallSelected(value);
-              }
-            },
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                context.goNamed('booking');
-              },
-              child: const Text('Book Appointment'),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-        ],
-      ),
-    );
-  }
-}
-
-/// Privacy notice widget for call recording feature.
-/// Displays a persistent banner informing users that calls are recorded
-/// for customer safety and appointment tracking.
-class _RecordingPrivacyNotice extends StatelessWidget {
-  const _RecordingPrivacyNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      color: AppColors.primaryContainer.withValues(alpha: 0.3),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            ),
-            child: Icon(
-              Icons.mic,
-              size: 16,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              '🔴 Recording for customer safety — conversations are recorded locally for appointment booking',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.secondary,
-              ),
+              color: colors.onSurfaceVariant,
             ),
           ),
         ],

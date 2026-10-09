@@ -10,6 +10,7 @@ import '../../../../core/database/collections/collections.dart';
 import '../../../../shared/widgets/info_button.dart';
 import '../../../../shared/widgets/swipe_to_delete_wrapper.dart';
 import '../../../../shared/widgets/pebble_context_menu.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class ServiceManagementScreen extends ConsumerWidget {
@@ -18,6 +19,7 @@ class ServiceManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(homeHiveProvider);
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -30,7 +32,9 @@ class ServiceManagementScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<List<Service>>(
-        stream: db.watchAllServices(),
+        stream: institutionId == null
+            ? Stream.value(const <Service>[])
+            : db.watchServicesForInstitution(institutionId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -118,7 +122,9 @@ class _ServiceCard extends ConsumerWidget {
           onTap: () => _handleDuplicate(context, ref),
         ),
         PebbleContextAction(
-          icon: service.isActive == false ? Icons.check_circle : Icons.hide_source,
+          icon: service.isActive == false
+              ? Icons.check_circle
+              : Icons.hide_source,
           label: service.isActive == false ? 'Activate' : 'Deactivate',
           onTap: () => _handleToggleActive(context, ref),
         ),
@@ -149,7 +155,7 @@ class _ServiceCard extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.schedule,
                         size: 16,
                         color: AppColors.secondary,
@@ -160,7 +166,7 @@ class _ServiceCard extends ConsumerWidget {
                         style: AppTypography.bodySmall,
                       ),
                       const SizedBox(width: AppSpacing.md),
-                      Icon(
+                      const Icon(
                         Icons.attach_money,
                         size: 16,
                         color: AppColors.secondary,
@@ -205,6 +211,8 @@ class _ServiceCard extends ConsumerWidget {
       ..defaultDurationMinutes = service.defaultDurationMinutes
       ..cost = service.cost
       ..description = service.description
+      ..colorValue = service.colorValue
+      ..institutionId = service.institutionId
       ..createdAt = DateTime.now()
       ..updatedAt = DateTime.now()
       ..synced = false
@@ -224,6 +232,8 @@ class _ServiceCard extends ConsumerWidget {
       ..defaultDurationMinutes = service.defaultDurationMinutes
       ..cost = service.cost
       ..description = service.description
+      ..colorValue = service.colorValue
+      ..institutionId = service.institutionId
       ..createdAt = service.createdAt
       ..updatedAt = DateTime.now()
       ..synced = false
@@ -232,7 +242,9 @@ class _ServiceCard extends ConsumerWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(service.isActive == false ? 'Service activated' : 'Service deactivated'),
+          content: Text(service.isActive == false
+              ? 'Service activated'
+              : 'Service deactivated'),
         ),
       );
     }

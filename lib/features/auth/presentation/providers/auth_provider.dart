@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../../core/config/release_scope.dart';
+
 // Secure storage provider
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 });
@@ -90,7 +92,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // User was previously logged in
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: LocalUser(uid: 'local-user', email: storedEmail, name: storedName, phone: storedPhone),
+        user: LocalUser(
+            uid: 'local-user',
+            email: storedEmail,
+            name: storedName,
+            phone: storedPhone),
       );
     } else {
       state = const AuthState(status: AuthStatus.unauthenticated);
@@ -141,10 +147,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = AuthState(
         status: AuthStatus.authenticated,
-        user: LocalUser(uid: 'local-user', email: email, name: storedName, phone: storedPhone),
+        user: LocalUser(
+            uid: 'local-user',
+            email: email,
+            name: storedName,
+            phone: storedPhone),
       );
     } catch (e) {
-      state = AuthState(
+      state = const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'An unexpected error occurred',
       );
@@ -172,7 +182,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       // Store password hash for password reset capability
-      await _storage.write(key: 'user_password_hash', value: _hashPassword(password));
+      await _storage.write(
+          key: 'user_password_hash', value: _hashPassword(password));
       await _storage.write(key: 'auth_token', value: 'valid');
       await _storage.write(key: 'user_email', value: email);
 
@@ -181,7 +192,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: LocalUser(uid: 'local-user', email: email, name: '', phone: null),
       );
     } catch (e) {
-      state = AuthState(
+      state = const AuthState(
         status: AuthStatus.unauthenticated,
         error: 'An unexpected error occurred',
       );
@@ -189,6 +200,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signInWithGoogle() async {
+    if (!ReleaseScope.googleSignInEnabled) {
+      state = const AuthState(
+        status: AuthStatus.unauthenticated,
+        error: 'Google Sign-In is not available on this platform.',
+      );
+      return;
+    }
     state = state.copyWith(status: AuthStatus.loading, error: null);
     state = const AuthState(
       status: AuthStatus.unauthenticated,
@@ -243,7 +261,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Change password - verifies current password first
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
+  Future<bool> changePassword(
+      String currentPassword, String newPassword) async {
     state = state.copyWith(error: null);
 
     try {
@@ -262,12 +281,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // Validate new password
       if (newPassword.length < 6) {
-        state = state.copyWith(error: 'New password must be at least 6 characters');
+        state =
+            state.copyWith(error: 'New password must be at least 6 characters');
         return false;
       }
 
       // Update password hash
-      await _storage.write(key: 'user_password_hash', value: _hashPassword(newPassword));
+      await _storage.write(
+          key: 'user_password_hash', value: _hashPassword(newPassword));
       return true;
     } catch (e) {
       state = state.copyWith(error: 'Failed to change password');
@@ -279,7 +300,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Returns true if email exists in storage
   Future<bool> sendPasswordResetEmail(String email) async {
     final storedEmail = await _storage.read(key: 'user_email');
-    if (storedEmail != null && storedEmail.toLowerCase() == email.toLowerCase()) {
+    if (storedEmail != null &&
+        storedEmail.toLowerCase() == email.toLowerCase()) {
       // Store pending reset state
       await _storage.write(key: 'pending_reset_email', value: email);
       await _storage.write(key: 'reset_token', value: 'demo-reset-token');
@@ -295,12 +317,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     final pendingEmail = await _storage.read(key: 'pending_reset_email');
-    if (pendingEmail == null || pendingEmail.toLowerCase() != email.toLowerCase()) {
+    if (pendingEmail == null ||
+        pendingEmail.toLowerCase() != email.toLowerCase()) {
       return false;
     }
 
     // Update password hash
-    await _storage.write(key: 'user_password_hash', value: _hashPassword(newPassword));
+    await _storage.write(
+        key: 'user_password_hash', value: _hashPassword(newPassword));
     // Clear reset state
     await _storage.delete(key: 'pending_reset_email');
     await _storage.delete(key: 'reset_token');

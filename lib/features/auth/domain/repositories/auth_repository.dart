@@ -3,6 +3,10 @@ import '../../domain/entities/auth_user.dart';
 abstract class AuthRepository {
   Future<AuthUser?> getCurrentUser();
 
+  /// Bypasses the local auth cache and resolves the current Firestore profile.
+  /// Used after trusted backend operations change membership atomically.
+  Future<AuthUser?> refreshCurrentUser();
+
   Stream<AuthUser?> get authStateChanges;
 
   Future<AuthUser> signInWithEmail({
@@ -20,8 +24,16 @@ abstract class AuthRepository {
 
   Future<void> signOut();
 
-  Future<void> linkUserToInstitution({
-    required String institutionId,
-    required UserRole role,
+  Future<void> acknowledgePasswordChangePrompt();
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
   });
+
+  /// Deletes the signed-in identity through the trusted backend.
+  ///
+  /// [deleteInstitution] is only valid for the sole owner and permanently
+  /// removes the institution and every membership associated with it.
+  Future<void> deleteAccount({required bool deleteInstitution});
 }

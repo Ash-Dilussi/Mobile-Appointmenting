@@ -117,7 +117,7 @@ void main() {
   // ── EntitlementState.isEnabled() ─────────────────────────────────────────
 
   group('EntitlementState.loading()', () {
-    final state = EntitlementState.loading();
+    const state = EntitlementState.loading();
 
     test('isLoading is true', () => expect(state.isLoading, isTrue));
 
@@ -187,7 +187,7 @@ void main() {
 
   group('EntitlementState — admin override (Firebase console)', () {
     // Institution on free tier but with callRecording granted via Firebase override
-    final stateWithOverride = EntitlementState(
+    const stateWithOverride = EntitlementState(
       tier: PlanTier.free,
       overrides: {AppFeature.callRecording},
     );
@@ -217,7 +217,7 @@ void main() {
   });
 
   group('EntitlementState — no expiry (null expiresAt)', () {
-    final perpetualPro = const EntitlementState(tier: PlanTier.pro);
+    const perpetualPro = EntitlementState(tier: PlanTier.pro);
 
     test('pro features enabled with no expiry date', () {
       expect(perpetualPro.isEnabled(AppFeature.callRecording), isTrue);

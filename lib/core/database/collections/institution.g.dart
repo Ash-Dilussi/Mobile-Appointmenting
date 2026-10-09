@@ -26,13 +26,14 @@ class InstitutionAdapter extends TypeAdapter<Institution> {
       ..ownerId = fields[6] as String
       ..address = fields[7] as String?
       ..phone = fields[8] as String?
-      ..email = fields[9] as String?;
+      ..email = fields[9] as String?
+      ..hasEverHadAdditionalStaff = fields[10] as bool?;
   }
 
   @override
   void write(BinaryWriter writer, Institution obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -52,7 +53,9 @@ class InstitutionAdapter extends TypeAdapter<Institution> {
       ..writeByte(8)
       ..write(obj.phone)
       ..writeByte(9)
-      ..write(obj.email);
+      ..write(obj.email)
+      ..writeByte(10)
+      ..write(obj.hasEverHadAdditionalStaff);
   }
 
   @override

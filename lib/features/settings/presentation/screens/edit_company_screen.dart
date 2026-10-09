@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/style_preset.dart';
 import '../../../../core/database/collections/institution.dart';
@@ -55,7 +54,7 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
     }
   }
 
-  Future<void> _saveCompany() async {
+  Future<void> _saveBusiness() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isLoading = true);
@@ -63,7 +62,8 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
     try {
       final session = ref.read(authSessionProvider);
       final hiveService = ref.read(hiveServiceProvider);
-      final institution = hiveService.getInstitutionById(session!.institutionId!);
+      final institution =
+          hiveService.getInstitutionById(session!.institutionId!);
 
       if (institution != null) {
         institution.name = _nameController.text.trim();
@@ -84,7 +84,7 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Company updated successfully')),
+            const SnackBar(content: Text('Business updated successfully')),
           );
           context.pop();
         }
@@ -95,6 +95,7 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
   }
 
   Color _getPresetPrimaryColor(StylePreset preset) {
+    // Intentional invariant previews of each preset, not feature surfaces.
     switch (preset) {
       case StylePreset.solarOrange:
         return const Color(0xFF904D00);
@@ -111,21 +112,22 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
     final hiveService = ref.watch(hiveServiceProvider);
 
     if (session?.institutionId == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Edit Company')),
-        body: const Center(child: Text('No company found')),
+        appBar: AppBar(title: const Text('Edit Business')),
+        body: const Center(child: Text('No business found')),
       );
     }
 
     final institution = hiveService.getInstitutionById(session!.institutionId!);
     if (institution == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Edit Company')),
-        body: const Center(child: Text('Company not found')),
+        appBar: AppBar(title: const Text('Edit Business')),
+        body: const Center(child: Text('Business not found')),
       );
     }
 
@@ -135,9 +137,9 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
-        title: const Text('Edit Company'),
+        title: const Text('Edit Business'),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -158,13 +160,13 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(
-                labelText: 'Company Name',
-                hintText: 'Enter company name',
+                labelText: 'Business Name',
+                hintText: 'Enter business name',
                 prefixIcon: Icon(Icons.business),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter company name';
+                  return 'Please enter a business name';
                 }
                 return null;
               },
@@ -174,7 +176,7 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
               controller: _addressController,
               decoration: const InputDecoration(
                 labelText: 'Address',
-                hintText: 'Enter company address',
+                hintText: 'Enter business address',
                 prefixIcon: Icon(Icons.location_on_outlined),
               ),
               maxLines: 2,
@@ -205,15 +207,15 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppColors.onSurface,
+                color: colors.onSurface,
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Choose a color theme for your company',
+              'Choose a color theme for your business',
               style: TextStyle(
                 fontSize: 14,
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -231,13 +233,14 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? _getPresetPrimaryColor(preset).withValues(alpha: 0.15)
-                          : AppColors.surfaceContainerLowest,
+                          ? _getPresetPrimaryColor(preset)
+                              .withValues(alpha: 0.15)
+                          : colors.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                       border: Border.all(
                         color: isSelected
                             ? _getPresetPrimaryColor(preset)
-                            : AppColors.secondary.withValues(alpha: 0.3),
+                            : colors.outlineVariant,
                         width: isSelected ? 2 : 1,
                       ),
                     ),
@@ -257,8 +260,10 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
                           preset.displayName,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            color: AppColors.onSurface,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: colors.onSurface,
                           ),
                         ),
                       ],
@@ -269,7 +274,7 @@ class _EditCompanyScreenState extends ConsumerState<EditCompanyScreen> {
             ),
             const SizedBox(height: AppSpacing.xxl),
             FilledButton(
-              onPressed: _isLoading ? null : _saveCompany,
+              onPressed: _isLoading ? null : _saveBusiness,
               child: _isLoading
                   ? const SizedBox(
                       height: 20,

@@ -6,7 +6,8 @@ const Map<String, String> kAuthErrorMessages = {
   'invalid-email': 'Please enter a valid email address.',
   'weak-password': 'Password must be at least 6 characters.',
   'user-disabled': 'This account has been disabled. Contact support.',
-  'network-request-failed': 'No internet connection. Please check your network.',
+  'network-request-failed':
+      'No internet connection. Please check your network.',
   'too-many-requests': 'Too many attempts. Please wait and try again.',
   'operation-not-allowed': 'This sign-in method is not enabled.',
   'requires-recent-login': 'Please sign in again to continue.',

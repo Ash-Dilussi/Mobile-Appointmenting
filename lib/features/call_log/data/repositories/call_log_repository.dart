@@ -92,9 +92,7 @@ class CallLogRepository {
     if (endTime != null) {
       entry.endTime = endTime;
       // Compute duration if we have start time
-      if (entry.startTime != null) {
-        entry.durationSeconds = endTime.difference(entry.startTime).inSeconds;
-      }
+      entry.durationSeconds = endTime.difference(entry.startTime).inSeconds;
     }
 
     if (durationSeconds != null) {

@@ -3,12 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/database/collections/appointment.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../../../../shared/widgets/app_badge.dart';
+import '../../../../shared/widgets/appointment_tile.dart';
+import '../../../../shared/widgets/service_badge.dart';
+import '../../../call_history/application/app_call_service.dart';
+import '../widgets/appointment_note_card.dart';
 
-class AppointmentDetailScreen extends ConsumerWidget {
+class AppointmentDetailScreen extends ConsumerStatefulWidget {
   final int appointmentId;
 
   const AppointmentDetailScreen({
@@ -17,9 +23,17 @@ class AppointmentDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppointmentDetailScreen> createState() =>
+      _AppointmentDetailScreenState();
+}
+
+class _AppointmentDetailScreenState
+    extends ConsumerState<AppointmentDetailScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final db = ref.watch(homeHiveProvider);
-    final appointment = db.getAppointmentById(appointmentId);
+    final appointment = db.getAppointmentById(widget.appointmentId);
 
     if (appointment == null) {
       return Scaffold(
@@ -49,9 +63,13 @@ class AppointmentDetailScreen extends ConsumerWidget {
     final station = appointment.stationId != null
         ? db.getServiceStationById(appointment.stationId!)
         : null;
+    final customerName = customer?.name.trim() ?? '';
+    final customerPhone = customer?.phoneNumber.trim() ?? '';
+    final customerEmail = customer?.email?.trim() ?? '';
+    final customerId = customer?.id;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -67,11 +85,12 @@ class AppointmentDetailScreen extends ConsumerWidget {
         centerTitle: true,
         actions: [
           TextButton.icon(
-            onPressed: () {
-              context.goNamed(
+            onPressed: () async {
+              await context.pushNamed<bool>(
                 'booking-edit',
-                pathParameters: {'id': appointmentId.toString()},
+                pathParameters: {'id': widget.appointmentId.toString()},
               );
+              if (mounted) setState(() {});
             },
             icon: const Icon(Icons.edit, size: 20),
             label: const Text('Edit'),
@@ -84,8 +103,25 @@ class AppointmentDetailScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Status Badge
-            _StatusBadge(status: appointment.status),
+            Center(
+              child: AppBadge(
+                presentation: appointmentStatusPresentation(
+                  appointment.status,
+                  colors,
+                ),
+                showDot: true,
+              ),
+            ),
             const SizedBox(height: AppSpacing.lg),
+
+            _StatusActionsCard(
+              currentStatus: appointment.status,
+              onStatusSelected: (status) => _updateStatus(
+                appointment: appointment,
+                status: status,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
 
             // Customer Section - Floating Pebble Card
             _PebbleCard(
@@ -95,35 +131,50 @@ class AppointmentDetailScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    customer?.name ?? 'Unknown Customer',
+                    customerName.isEmpty ? 'Unknown Customer' : customerName,
                     style: AppTypography.titleLarge,
                   ),
                   if (customer != null) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    _InfoRow(
-                      icon: Icons.phone,
-                      text: customer.phoneNumber,
-                    ),
-                    if (customer.email != null && customer.email!.isNotEmpty)
+                    if (customerPhone.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      _InfoRow(
+                        icon: Icons.phone,
+                        text: customerPhone,
+                      ),
+                    ],
+                    if (customerEmail.isNotEmpty)
                       _InfoRow(
                         icon: Icons.email,
-                        text: customer.email!,
+                        text: customerEmail,
                       ),
-                    const SizedBox(height: AppSpacing.md),
-                    InkWell(
-                      onTap: () {
-                        context.goNamed(
-                          'customer-profile',
-                          pathParameters: {'id': customer.id.toString()},
-                        );
-                      },
-                      child: Text(
-                        'View Customer Profile',
-                        style: AppTypography.labelMedium.copyWith(
-                          color: AppColors.primary,
+                    if (customerId != null && customerPhone.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      OutlinedButton.icon(
+                        onPressed: () => _handleCall(
+                          customerId: customerId,
+                          phoneNumber: customerPhone,
+                        ),
+                        icon: const Icon(Icons.call),
+                        label: const Text('Call Customer'),
+                      ),
+                    ],
+                    if (customerId != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      InkWell(
+                        onTap: () {
+                          context.goNamed(
+                            'customer-profile',
+                            pathParameters: {'id': customerId.toString()},
+                          );
+                        },
+                        child: Text(
+                          'View Customer Profile',
+                          style: AppTypography.labelMedium.copyWith(
+                            color: colors.primary,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ],
               ),
@@ -137,9 +188,9 @@ class AppointmentDetailScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    service?.title ?? 'No Service Assigned',
-                    style: AppTypography.titleLarge,
+                  ServiceBadge(
+                    label: service?.title ?? 'No Service Assigned',
+                    colorValue: service?.colorValue,
                   ),
                   if (service != null) ...[
                     const SizedBox(height: AppSpacing.md),
@@ -148,15 +199,13 @@ class AppointmentDetailScreen extends ConsumerWidget {
                         Expanded(
                           child: _InfoRow(
                             icon: Icons.schedule,
-                            text:
-                                '${service.defaultDurationMinutes} minutes',
+                            text: '${service.defaultDurationMinutes} minutes',
                           ),
                         ),
                         Expanded(
                           child: _InfoRow(
                             icon: Icons.attach_money,
-                            text:
-                                '\$${service.cost.toStringAsFixed(2)}',
+                            text: '\$${service.cost.toStringAsFixed(2)}',
                           ),
                         ),
                       ],
@@ -175,14 +224,15 @@ class AppointmentDetailScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    DateFormat('EEEE, MMMM d, yyyy').format(appointment.startTime),
+                    DateFormat('EEEE, MMMM d, yyyy')
+                        .format(appointment.startTime),
                     style: AppTypography.titleLarge,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     DateFormat('h:mm a').format(appointment.startTime),
                     style: AppTypography.titleLarge.copyWith(
-                      color: AppColors.primary,
+                      color: colors.primary,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -192,13 +242,13 @@ class AppointmentDetailScreen extends ConsumerWidget {
                       vertical: AppSpacing.sm,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                      color: colors.primaryContainer,
                       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                     ),
                     child: Text(
                       'Duration: ${appointment.endTime.difference(appointment.startTime).inMinutes} minutes',
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.primary,
+                        color: colors.onPrimaryContainer,
                       ),
                     ),
                   ),
@@ -217,12 +267,13 @@ class AppointmentDetailScreen extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(AppSpacing.md),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        color: colors.primaryContainer,
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.chair,
-                        color: AppColors.primary,
+                        color: colors.onPrimaryContainer,
                         size: 24,
                       ),
                     ),
@@ -237,15 +288,22 @@ class AppointmentDetailScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.md),
             ],
 
-            // Notes Section - Floating Pebble Card (if notes exist)
-            if (appointment.notes != null &&
-                appointment.notes!.isNotEmpty) ...[
+            // Structured appointment notes are read-only here. Editing remains
+            // centralized in BookingScreen's edit flow.
+            if (appointment.notes.isNotEmpty) ...[
               _PebbleCard(
                 icon: Icons.notes,
                 title: 'Notes',
-                child: Text(
-                  appointment.notes!,
-                  style: AppTypography.bodyLarge,
+                child: Column(
+                  children: [
+                    for (var index = 0;
+                        index < appointment.notes.length;
+                        index++) ...[
+                      AppointmentNoteCard(note: appointment.notes[index]),
+                      if (index < appointment.notes.length - 1)
+                        const SizedBox(height: AppSpacing.sm),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -257,12 +315,80 @@ class AppointmentDetailScreen extends ConsumerWidget {
               child: Text(
                 'Created ${_formatDate(appointment.createdAt)}',
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.secondary,
+                  color: colors.onSurfaceVariant,
                 ),
               ),
             ),
             const SizedBox(height: AppSpacing.xxl),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleCall({
+    required int customerId,
+    required String phoneNumber,
+  }) async {
+    final result = await ref.read(appCallServiceProvider).initiateCustomerCall(
+          customerId: customerId,
+          phoneNumber: phoneNumber,
+        );
+    final message = result.failureMessage;
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
+  }
+
+  Future<void> _updateStatus({
+    required Appointment appointment,
+    required String status,
+  }) async {
+    if (appointment.status == status) return;
+
+    final label = switch (status) {
+      Appointment.statusDone => 'complete this appointment',
+      Appointment.statusCancelled => 'cancel this appointment',
+      Appointment.statusNoShow => 'mark this appointment as a no-show',
+      _ => 'change this appointment',
+    };
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Update appointment status?'),
+            content: Text('Are you sure you want to $label?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Keep current status'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Update status'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    appointment
+      ..status = status
+      ..updatedAt = DateTime.now()
+      ..synced = false;
+    final updated = await ref
+        .read(homeHiveProvider)
+        .updateAppointment(widget.appointmentId, appointment);
+    if (!mounted) return;
+    if (updated) setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          updated
+              ? 'Appointment status updated.'
+              : 'Could not update the appointment status.',
         ),
       ),
     );
@@ -284,6 +410,104 @@ class AppointmentDetailScreen extends ConsumerWidget {
   }
 }
 
+class _StatusActionsCard extends StatelessWidget {
+  const _StatusActionsCard({
+    required this.currentStatus,
+    required this.onStatusSelected,
+  });
+
+  final String currentStatus;
+  final ValueChanged<String> onStatusSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isTerminal = currentStatus == Appointment.statusDone ||
+        currentStatus == Appointment.statusCancelled ||
+        currentStatus == Appointment.statusNoShow;
+
+    return _PebbleCard(
+      icon: Icons.fact_check_outlined,
+      title: 'Status actions',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            isTerminal
+                ? 'This appointment has a final status. You can still correct it below.'
+                : 'Record the outcome so operational reports remain accurate.',
+            style: AppTypography.bodyMedium.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              _StatusButton(
+                label: 'Completed',
+                icon: Icons.check_circle_outline,
+                selected: currentStatus == Appointment.statusDone,
+                onPressed: () => onStatusSelected(Appointment.statusDone),
+              ),
+              _StatusButton(
+                label: 'No-show',
+                icon: Icons.person_off_outlined,
+                selected: currentStatus == Appointment.statusNoShow,
+                onPressed: () => onStatusSelected(Appointment.statusNoShow),
+              ),
+              _StatusButton(
+                label: 'Cancelled',
+                icon: Icons.cancel_outlined,
+                selected: currentStatus == Appointment.statusCancelled,
+                onPressed: () => onStatusSelected(Appointment.statusCancelled),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusButton extends StatelessWidget {
+  const _StatusButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '$label appointment status',
+      child: SizedBox(
+        height: 48,
+        child: selected
+            ? FilledButton.icon(
+                onPressed: null,
+                icon: Icon(icon),
+                label: Text(label),
+              )
+            : OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: Icon(icon),
+                label: Text(label),
+              ),
+      ),
+    );
+  }
+}
+
 class _PebbleCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -297,23 +521,13 @@ class _PebbleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: colors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        boxShadow: AppShadows.overlay(colors.shadow),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,12 +545,12 @@ class _PebbleCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.sm),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                    color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
                   child: Icon(
                     icon,
-                    color: AppColors.primary,
+                    color: colors.onPrimaryContainer,
                     size: 20,
                   ),
                 ),
@@ -344,7 +558,7 @@ class _PebbleCard extends StatelessWidget {
                 Text(
                   title,
                   style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.secondary,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -377,12 +591,13 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Row(
       children: [
         Icon(
           icon,
           size: 18,
-          color: AppColors.secondary,
+          color: colors.onSurfaceVariant,
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
@@ -393,67 +608,5 @@ class _InfoRow extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (color, bgColor, label) = _getStatusStyle(status);
-
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              label,
-              style: AppTypography.labelLarge.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  (Color, Color, String) _getStatusStyle(String status) {
-    switch (status.toLowerCase()) {
-      case 'upcoming':
-        return (AppColors.primary, AppColors.primaryContainer.withValues(alpha: 0.2), 'Upcoming');
-      case 'confirmed':
-        return (AppColors.ongoing, AppColors.ongoing.withValues(alpha: 0.1), 'Confirmed');
-      case 'ongoing':
-        return (AppColors.ongoing, AppColors.ongoing.withValues(alpha: 0.2), 'Ongoing');
-      case 'done':
-        return (AppColors.success, AppColors.success.withValues(alpha: 0.1), 'Completed');
-      case 'cancelled':
-        return (AppColors.error, AppColors.errorContainer, 'Cancelled');
-      default:
-        return (AppColors.secondary, AppColors.surfaceContainer, status);
-    }
   }
 }

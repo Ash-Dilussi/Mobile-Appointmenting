@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_shadows.dart';
+import '../../../call_log/providers/call_log_providers.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
@@ -39,27 +41,35 @@ class MainShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the Android call-event listener alive while an authenticated user
+    // is inside the application shell. Completed calls are persisted to the
+    // canonical CallLog collection by ActiveCallNotifier.
+    ref.watch(activeCallStateProvider);
+
+    final colors = Theme.of(context).colorScheme;
     final selectedIndex = _calculateSelectedIndex(context);
 
     return Scaffold(
       body: child,
+      floatingActionButton: selectedIndex == 0
+          ? FloatingActionButton(
+              key: const Key('dashboard-quick-book'),
+              tooltip: 'New appointment',
+              onPressed: () => context.pushNamed('booking'),
+              child: const Icon(Icons.add),
+            )
+          : null,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: colors.surfaceContainerLowest,
           border: Border(
             top: BorderSide(
-              color: AppColors.outline.withValues(alpha: 0.2),
+              color: colors.outline.withValues(alpha: 0.2),
               width: 0.5,
             ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.onSurface.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, -2),
-            ),
-          ],
+          boxShadow: AppShadows.navigation(colors.shadow),
         ),
         child: SafeArea(
           child: Padding(
@@ -128,22 +138,20 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               isSelected ? activeIcon : icon,
-              color: isSelected ? AppColors.primary : AppColors.secondary,
+              color: isSelected ? colors.primary : colors.onSurfaceVariant,
               size: 24,
             ),
             const SizedBox(height: 4),
@@ -152,7 +160,7 @@ class _NavItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? AppColors.primary : AppColors.secondary,
+                color: isSelected ? colors.primary : colors.onSurfaceVariant,
               ),
             ),
           ],

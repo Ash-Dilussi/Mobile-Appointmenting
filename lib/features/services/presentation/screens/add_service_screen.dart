@@ -3,10 +3,13 @@ import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../core/theme/service_color_palette.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../../core/logging/logger_service.dart';
+import '../../../../core/widgets/unsaved_changes_guard.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class AddServiceScreen extends ConsumerStatefulWidget {
@@ -18,7 +21,8 @@ class AddServiceScreen extends ConsumerStatefulWidget {
   ConsumerState<AddServiceScreen> createState() => _AddServiceScreenState();
 }
 
-class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
+class _AddServiceScreenState extends ConsumerState<AddServiceScreen>
+    with UnsavedChangesGuard<AddServiceScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _durationController = TextEditingController(text: '30');
@@ -28,6 +32,9 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
   bool _isLoading = false;
   bool _isEditing = false;
   Service? _existingService;
+  int _selectedColorValue = ServiceColorPalette.defaultValue;
+  late _ServiceFormSnapshot _baseline;
+  bool _baselineReady = false;
 
   @override
   void initState() {
@@ -35,7 +42,42 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
     if (widget.serviceId != null) {
       _isEditing = true;
       _loadService();
+    } else {
+      _captureBaseline();
     }
+    for (final controller in [
+      _titleController,
+      _durationController,
+      _costController,
+      _descriptionController,
+    ]) {
+      controller.addListener(_refreshDirtyState);
+    }
+  }
+
+  void _refreshDirtyState() {
+    if (mounted) setState(() {});
+  }
+
+  void _captureBaseline() {
+    _baseline = _currentSnapshot();
+    _baselineReady = true;
+  }
+
+  _ServiceFormSnapshot _currentSnapshot() => _ServiceFormSnapshot(
+        title: _titleController.text.trim(),
+        duration: _durationController.text.trim(),
+        cost: _costController.text.trim(),
+        description: _descriptionController.text.trim(),
+        colorValue: _selectedColorValue,
+      );
+
+  @override
+  bool get hasUnsavedChanges =>
+      _baselineReady && !_baseline.matches(_currentSnapshot());
+
+  Future<void> _leaveScreen() async {
+    context.goNamed('service-management');
   }
 
   Future<void> _loadService() async {
@@ -49,11 +91,18 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
           _durationController.text = service.defaultDurationMinutes.toString();
           _costController.text = service.cost.toString();
           _descriptionController.text = service.description ?? '';
+          _selectedColorValue = ServiceColorPalette.resolve(
+            service.colorValue,
+          ).argbValue;
+          _captureBaseline();
         });
+      } else {
+        _captureBaseline();
       }
     } catch (e, st) {
       logger.error('AddServiceScreen', 'Failed to load service: $e',
           error: e, stackTrace: st);
+      if (!_baselineReady) _captureBaseline();
     }
   }
 
@@ -88,17 +137,26 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
           ..defaultDurationMinutes = duration
           ..cost = cost
           ..description = description.isNotEmpty ? description : null
+          ..colorValue = _selectedColorValue
           ..createdAt = _existingService!.createdAt
           ..updatedAt = DateTime.now()
-          ..synced = false;
+          ..synced = false
+          ..isActive = _existingService!.isActive
+          ..institutionId = _existingService!.institutionId;
         await db.updateService(_existingService!.id!, updated);
       } else {
         // Create new service
+        final institutionId = ref.read(authSessionProvider)?.institutionId;
+        if (institutionId == null || institutionId.isEmpty) {
+          throw StateError('An institution is required to create a service.');
+        }
         final newService = Service()
+          ..institutionId = institutionId
           ..title = title
           ..defaultDurationMinutes = duration
           ..cost = cost
           ..description = description.isNotEmpty ? description : null
+          ..colorValue = _selectedColorValue
           ..createdAt = DateTime.now()
           ..updatedAt = DateTime.now()
           ..synced = false;
@@ -106,6 +164,7 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
         await db.insertService(newService);
       }
 
+      await allowPopWithoutPrompt();
       if (mounted) {
         context.goNamed('service-management');
       }
@@ -116,7 +175,7 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error saving service: $e'),
-            backgroundColor: AppColors.error,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -129,139 +188,170 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => context.goNamed('service-management'),
+    final colors = Theme.of(context).colorScheme;
+
+    return PopScope<Object?>(
+      canPop: canPopWithoutDiscardConfirmation,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) await handleCloseRequest(_leaveScreen);
+      },
+      child: Scaffold(
+        backgroundColor: colors.surface,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => handleCloseRequest(_leaveScreen),
+          ),
+          title: Text(_isEditing ? 'Edit Service' : 'Add New Service'),
+          centerTitle: true,
         ),
-        title: Text(_isEditing ? 'Edit Service' : 'Add New Service'),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Title
-              TextFormField(
-                controller: _titleController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Service Title',
-                  hintText: 'e.g., Haircut, Consultation',
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a service title';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              // Duration and Cost Row
-              Row(
-                children: [
-                  // Duration
-                  Expanded(
-                    child: TextFormField(
-                      controller: _durationController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Duration (min)',
-                        hintText: '30',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Required';
-                        }
-                        final duration = int.tryParse(value);
-                        if (duration == null || duration <= 0) {
-                          return 'Invalid';
-                        }
-                        return null;
-                      },
-                    ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Title
+                TextFormField(
+                  controller: _titleController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Service Title',
+                    hintText: 'e.g., Haircut, Consultation',
                   ),
-                  const SizedBox(width: AppSpacing.md),
-                  // Cost
-                  Expanded(
-                    child: TextFormField(
-                      controller: _costController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a service title';
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                // Duration and Cost Row
+                Row(
+                  children: [
+                    // Duration
+                    Expanded(
+                      child: TextFormField(
+                        controller: _durationController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Duration (min)',
+                          hintText: '30',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Required';
+                          }
+                          final duration = int.tryParse(value);
+                          if (duration == null || duration <= 0) {
+                            return 'Invalid';
+                          }
+                          return null;
+                        },
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Cost (\$)',
-                        hintText: '0.00',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Required';
-                        }
-                        final cost = double.tryParse(value);
-                        if (cost == null || cost < 0) {
-                          return 'Invalid';
-                        }
-                        return null;
-                      },
                     ),
+                    const SizedBox(width: AppSpacing.md),
+                    // Cost
+                    Expanded(
+                      child: TextFormField(
+                        controller: _costController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Cost (\$)',
+                          hintText: '0.00',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Required';
+                          }
+                          final cost = double.tryParse(value);
+                          if (cost == null || cost < 0) {
+                            return 'Invalid';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                Text(
+                  'Appointment badge color',
+                  style: AppTypography.labelMedium.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Choose one of 10 colors. This identifies the service in appointment views.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _ServiceColorPicker(
+                  selectedValue: _selectedColorValue,
+                  onSelected: (value) {
+                    setState(() => _selectedColorValue = value);
+                  },
+                ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                // Description
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                    hintText: 'Add any notes about this service...',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.xxl),
+
+                // Save Button
+                FilledButton(
+                  onPressed: _isLoading ? null : _handleSave,
+                  child: _isLoading
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.onPrimary,
+                          ),
+                        )
+                      : Text(_isEditing ? 'Update Service' : 'Save Service'),
+                ),
+
+                if (_isEditing) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  OutlinedButton(
+                    onPressed:
+                        _isLoading ? null : () => _showDeleteDialog(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colors.error,
+                      side: BorderSide(color: colors.error),
+                    ),
+                    child: const Text('Delete Service'),
                   ),
                 ],
-              ),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              // Description
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                  hintText: 'Add any notes about this service...',
-                  alignLabelWithHint: true,
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
-
-              // Save Button
-              FilledButton(
-                onPressed: _isLoading ? null : _handleSave,
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.onPrimaryContainer,
-                        ),
-                      )
-                    : Text(_isEditing ? 'Update Service' : 'Save Service'),
-              ),
-
-              if (_isEditing) ...[
-                const SizedBox(height: AppSpacing.md),
-                OutlinedButton(
-                  onPressed:
-                      _isLoading ? null : () => _showDeleteDialog(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                  ),
-                  child: const Text('Delete Service'),
-                ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -269,6 +359,7 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
   }
 
   void _showDeleteDialog(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -287,7 +378,8 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
               await _handleDelete();
             },
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
+              backgroundColor: colors.error,
+              foregroundColor: colors.onError,
             ),
             child: const Text('Delete'),
           ),
@@ -304,6 +396,7 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
     try {
       final db = ref.read(homeHiveProvider);
       await db.deleteService(_existingService!.id!);
+      await allowPopWithoutPrompt();
       if (mounted) {
         context.goNamed('service-management');
       }
@@ -314,10 +407,109 @@ class _AddServiceScreenState extends ConsumerState<AddServiceScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error deleting service: $e'),
-            backgroundColor: AppColors.error,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
     }
+  }
+}
+
+class _ServiceFormSnapshot {
+  final String title;
+  final String duration;
+  final String cost;
+  final String description;
+  final int colorValue;
+
+  const _ServiceFormSnapshot({
+    required this.title,
+    required this.duration,
+    required this.cost,
+    required this.description,
+    required this.colorValue,
+  });
+
+  bool matches(_ServiceFormSnapshot other) =>
+      title == other.title &&
+      duration == other.duration &&
+      cost == other.cost &&
+      description == other.description &&
+      colorValue == other.colorValue;
+}
+
+class _ServiceColorPicker extends StatelessWidget {
+  const _ServiceColorPicker({
+    required this.selectedValue,
+    required this.onSelected,
+  });
+
+  final int selectedValue;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: ServiceColorPalette.options.map((option) {
+            final isSelected = option.argbValue == selectedValue;
+
+            return Semantics(
+              button: true,
+              selected: isSelected,
+              label: '${option.name} service color',
+              child: Tooltip(
+                message: option.name,
+                child: InkResponse(
+                  onTap: () => onSelected(option.argbValue),
+                  radius: 28,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 52,
+                    height: 52,
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? colors.onSurface
+                            : colors.outlineVariant,
+                        width: isSelected ? 3 : 1,
+                      ),
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: option.color,
+                        shape: BoxShape.circle,
+                      ),
+                      child: isSelected
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: option.onColor,
+                              size: 24,
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Selected: ${ServiceColorPalette.resolve(selectedValue).name}',
+          style: AppTypography.bodySmall.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
   }
 }

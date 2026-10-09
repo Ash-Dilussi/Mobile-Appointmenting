@@ -34,10 +34,50 @@ class DefaultFirebaseOptions {
     storageBucket: 'bookly-1f5f7.firebasestorage.app',
   );
 
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: '1036884766294',
-    projectId: 'bookly-1f5f7',
-  );
+  static const _iosApiKey =
+      String.fromEnvironment('BOOKLY_IOS_FIREBASE_API_KEY');
+  static const _iosAppId = String.fromEnvironment('BOOKLY_IOS_FIREBASE_APP_ID');
+  static const _iosMessagingSenderId =
+      String.fromEnvironment('BOOKLY_IOS_FIREBASE_MESSAGING_SENDER_ID');
+  static const _iosProjectId =
+      String.fromEnvironment('BOOKLY_IOS_FIREBASE_PROJECT_ID');
+  static const _iosStorageBucket =
+      String.fromEnvironment('BOOKLY_IOS_FIREBASE_STORAGE_BUCKET');
+  static const _iosBundleId =
+      String.fromEnvironment('BOOKLY_IOS_FIREBASE_BUNDLE_ID');
+
+  /// iOS values are extracted from the real `GoogleService-Info.plist` by the
+  /// hosted release workflow and supplied as compile-time definitions. Keeping
+  /// one injected source avoids committing Firebase configuration files while
+  /// ensuring secondary Firebase apps receive the same verified options.
+  static FirebaseOptions get ios {
+    const values = <String, String>{
+      'API_KEY': _iosApiKey,
+      'GOOGLE_APP_ID': _iosAppId,
+      'GCM_SENDER_ID': _iosMessagingSenderId,
+      'PROJECT_ID': _iosProjectId,
+      'STORAGE_BUCKET': _iosStorageBucket,
+      'BUNDLE_ID': _iosBundleId,
+    };
+    final missingKeys = values.entries
+        .where((entry) => entry.value.isEmpty)
+        .map((entry) => entry.key)
+        .join(', ');
+    if (missingKeys.isNotEmpty) {
+      throw StateError(
+        'iOS Firebase configuration is missing: $missingKeys. '
+        'Build through the configured release workflow or provide the '
+        'BOOKLY_IOS_FIREBASE_* dart-defines.',
+      );
+    }
+
+    return const FirebaseOptions(
+      apiKey: _iosApiKey,
+      appId: _iosAppId,
+      messagingSenderId: _iosMessagingSenderId,
+      projectId: _iosProjectId,
+      storageBucket: _iosStorageBucket,
+      iosBundleId: _iosBundleId,
+    );
+  }
 }

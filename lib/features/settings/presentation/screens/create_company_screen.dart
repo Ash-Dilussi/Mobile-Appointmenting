@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
+
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/style_preset.dart';
-import '../../../../core/database/collections/institution.dart';
-import '../../../../core/providers/hive_service_provider.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
-import '../../../../core/entitlements/entitlement_provider.dart';
+import '../../../auth/presentation/widgets/account_setup_recovery.dart';
+import '../../application/business_provisioning_service.dart';
 
 class CreateCompanyScreen extends ConsumerStatefulWidget {
   const CreateCompanyScreen({super.key});
@@ -24,6 +23,7 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   bool _isLoading = false;
+  String? _recoveryMessage;
   StylePreset _selectedPreset = StylePreset.solarOrange;
 
   @override
@@ -35,68 +35,50 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
     super.dispose();
   }
 
-  Future<void> _createCompany() async {
+  Future<void> _createBusiness() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    setState(() => _isLoading = true);
-
+    setState(() {
+      _isLoading = true;
+      _recoveryMessage = null;
+    });
     try {
       final session = ref.read(authSessionProvider);
-      final hiveService = ref.read(hiveServiceProvider);
-
       if (session == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Session expired. Please login again.')),
+              content: Text('Session expired. Please log in again.'),
+            ),
           );
         }
         return;
       }
 
-      // Create institution
-      final institutionId = 'inst_${DateTime.now().millisecondsSinceEpoch}';
-      final institution = Institution()
-        ..id = institutionId
-        ..name = _nameController.text.trim()
-        ..address = _addressController.text.trim().isEmpty
-            ? null
-            : _addressController.text.trim()
-        ..phone = _phoneController.text.trim().isEmpty
-            ? null
-            : _phoneController.text.trim()
-        ..email = _emailController.text.trim().isEmpty
-            ? null
-            : _emailController.text.trim()
-        ..themePreset = _selectedPreset.name
-        ..ownerId = session.userId;
-
-      await hiveService.insertInstitution(institution);
-
-      // Update user with institutionId
-      final user = hiveService.getUserById(session.userId);
-      if (user != null) {
-        user.institutionId = institutionId;
-        user.role = 'owner';
-        await hiveService.updateUser(user.id, user);
-      }
-
-      // Reload session
-      await ref.read(authSessionProvider.notifier).loadSession(session.email);
-
-      // Bootstrap entitlements for the new institution
-      // New institutions start on the free tier.
-      // bootstrap() will write 'free' to Hive cache and attempt Firebase fetch.
-      // It never throws — safe to call without try/catch here.
-      await ref
-          .read(entitlementProvider.notifier)
-          .bootstrap(institutionId: institutionId);
+      await ref.read(businessProvisioningServiceProvider).provision(
+            session: session,
+            name: _nameController.text,
+            address: _addressController.text,
+            phone: _phoneController.text,
+            email: _emailController.text,
+            themePreset: _selectedPreset.name,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Company created successfully!')),
+          const SnackBar(content: Text('Business created successfully!')),
         );
         context.go('/home');
+      }
+    } on BusinessProvisioningRecoveryRequired catch (error) {
+      if (mounted) {
+        setState(() => _recoveryMessage = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _recoveryMessage =
+              'We could not finish setting up your business. Your account is safe, and you can retry.';
+        });
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -104,6 +86,8 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
   }
 
   Color _getPresetPrimaryColor(StylePreset preset) {
+    // Intentional invariant previews of preset choices, not themeable feature
+    // surfaces. Selection text and surrounding UI remain semantic.
     switch (preset) {
       case StylePreset.solarOrange:
         return const Color(0xFF904D00);
@@ -120,52 +104,73 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
-        title: const Text('Create Company'),
+        title: const Text('Create Business'),
         centerTitle: true,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed('business-setup');
+            }
+          },
+        ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
+      body: _recoveryMessage != null
+          ? SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: AccountSetupRecovery(
+                      message: _recoveryMessage!,
+                      onRetry: _createBusiness,
+                      isRetrying: _isLoading,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : Form(
+              key: _formKey,
+              child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
           children: [
-            Icon(
-              Icons.business,
-              size: 64,
-              color: AppColors.primary,
-            ),
+            Icon(Icons.business_outlined, size: 64, color: colors.primary),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'Set Up Your Company',
+              'Set Up Your Business',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
+                color: colors.onSurface,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Create your company profile to start managing your business.',
-              style: TextStyle(
-                color: AppColors.secondary,
-              ),
+              'Add the details your customers and team will recognise.',
+              style: TextStyle(color: colors.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xxl),
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(
-                labelText: 'Company Name',
-                hintText: 'Enter company name',
-                prefixIcon: Icon(Icons.business),
+                labelText: 'Business Name',
+                hintText: 'Enter business name',
+                prefixIcon: Icon(Icons.business_outlined),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter company name';
+                  return 'Please enter a business name';
                 }
                 return null;
               },
@@ -175,7 +180,7 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
               controller: _addressController,
               decoration: const InputDecoration(
                 labelText: 'Address',
-                hintText: 'Enter company address',
+                hintText: 'Enter business address',
                 prefixIcon: Icon(Icons.location_on_outlined),
               ),
               maxLines: 2,
@@ -206,16 +211,13 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppColors.onSurface,
+                color: colors.onSurface,
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Choose a color theme for your company',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.secondary,
-              ),
+              'Choose a color theme for your business',
+              style: TextStyle(fontSize: 14, color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: AppSpacing.md),
             Wrap(
@@ -223,49 +225,58 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
               runSpacing: AppSpacing.sm,
               children: StylePreset.values.map((preset) {
                 final isSelected = _selectedPreset == preset;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedPreset = preset),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.sm,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? _getPresetPrimaryColor(preset)
-                              .withValues(alpha: 0.15)
-                          : AppColors.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                      border: Border.all(
+                return Semantics(
+                  button: true,
+                  selected: isSelected,
+                  label: '${preset.displayName} theme',
+                  excludeSemantics: true,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    onTap: () => setState(() => _selectedPreset = preset),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.sm,
+                      ),
+                      decoration: BoxDecoration(
                         color: isSelected
                             ? _getPresetPrimaryColor(preset)
-                            : AppColors.secondary.withValues(alpha: 0.3),
-                        width: isSelected ? 2 : 1,
+                                .withValues(alpha: 0.15)
+                            : colors.surfaceContainerLowest,
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
+                        border: Border.all(
+                          color: isSelected
+                              ? _getPresetPrimaryColor(preset)
+                              : colors.outlineVariant,
+                          width: isSelected ? 2 : 1,
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: _getPresetPrimaryColor(preset),
-                            shape: BoxShape.circle,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: _getPresetPrimaryColor(preset),
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Text(
-                          preset.displayName,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: AppColors.onSurface,
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            preset.displayName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: colors.onSurface,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -273,18 +284,18 @@ class _CreateCompanyScreenState extends ConsumerState<CreateCompanyScreen> {
             ),
             const SizedBox(height: AppSpacing.xxl),
             FilledButton(
-              onPressed: _isLoading ? null : _createCompany,
+              onPressed: _isLoading ? null : _createBusiness,
               child: _isLoading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Create Company'),
+                  : const Text('Create Business'),
             ),
           ],
-        ),
-      ),
+              ),
+            ),
     );
   }
 }

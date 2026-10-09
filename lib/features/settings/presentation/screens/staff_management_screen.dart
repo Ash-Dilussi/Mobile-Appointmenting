@@ -1,27 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/app_badge.dart';
 import '../../../../core/auth/rbac.dart';
 import '../../../../core/database/collections/user.dart';
 import '../../../../core/database/collections/institution.dart';
 import '../../../../core/providers/hive_service_provider.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../../core/auth/officer_provisioning_service.dart';
 
 class StaffManagementScreen extends ConsumerWidget {
   const StaffManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
     final hiveService = ref.watch(hiveServiceProvider);
 
     // Check if user has permission (owner only)
     if (session?.role != Role.owner) {
       return Scaffold(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colors.surface,
         appBar: AppBar(
           title: const Text('Staff Management'),
           centerTitle: true,
@@ -38,17 +42,18 @@ class StaffManagementScreen extends ConsumerWidget {
         ),
         body: Center(
           child: Padding(
-            padding: EdgeInsets.all(AppSpacing.screenPadding),
+            padding: const EdgeInsets.all(AppSpacing.screenPadding),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.lock_outline, size: 64, color: AppColors.secondary),
-                SizedBox(height: AppSpacing.lg),
+                Icon(Icons.lock_outline,
+                    size: 64, color: colors.onSurfaceVariant),
+                const SizedBox(height: AppSpacing.lg),
                 Text('Access Denied', style: AppTypography.titleLarge),
-                SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Only owners can manage staff members.',
-                  style: TextStyle(color: AppColors.secondary),
+                  style: TextStyle(color: colors.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -64,7 +69,7 @@ class StaffManagementScreen extends ConsumerWidget {
     final pendingCount = hiveService.getPendingLeaveRequestCount(institutionId);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Staff Management'),
         centerTitle: true,
@@ -86,13 +91,14 @@ class StaffManagementScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.business_outlined, size: 64, color: AppColors.secondary),
+                    Icon(Icons.business_outlined,
+                        size: 64, color: colors.onSurfaceVariant),
                     const SizedBox(height: AppSpacing.lg),
-                    Text('No Company Found', style: AppTypography.titleLarge),
+                    Text('No Business Found', style: AppTypography.titleLarge),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Create a company to start managing staff.',
-                      style: TextStyle(color: AppColors.secondary),
+                      'Set up a business to start managing staff.',
+                      style: TextStyle(color: colors.onSurfaceVariant),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -124,18 +130,20 @@ class StaffManagementScreen extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Text('Staff & Operators', style: AppTypography.titleMedium),
+                        Text('Staff & Operators',
+                            style: AppTypography.titleMedium),
                         const SizedBox(width: AppSpacing.sm),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryContainer,
+                            color: colors.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             '${staffMembers.where((s) => s.role == 'officer').length}',
                             style: AppTypography.labelSmall.copyWith(
-                              color: AppColors.onPrimaryContainer,
+                              color: colors.onPrimaryContainer,
                             ),
                           ),
                         ),
@@ -152,16 +160,20 @@ class StaffManagementScreen extends ConsumerWidget {
                             padding: const EdgeInsets.all(AppSpacing.xxl),
                             child: Column(
                               children: [
-                                Icon(Icons.people_outline, size: 48, color: AppColors.secondary),
+                                Icon(Icons.people_outline,
+                                    size: 48, color: colors.onSurfaceVariant),
                                 const SizedBox(height: AppSpacing.md),
                                 Text(
                                   'No staff members yet',
-                                  style: TextStyle(color: AppColors.secondary),
+                                  style:
+                                      TextStyle(color: colors.onSurfaceVariant),
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
                                 Text(
-                                  'Invite staff to join your company.',
-                                  style: TextStyle(color: AppColors.secondary, fontSize: 12),
+                                  'Create an officer account to add staff.',
+                                  style: TextStyle(
+                                      color: colors.onSurfaceVariant,
+                                      fontSize: 12),
                                 ),
                               ],
                             ),
@@ -171,7 +183,9 @@ class StaffManagementScreen extends ConsumerWidget {
                     : SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            final officers = staffMembers.where((s) => s.role == 'officer').toList();
+                            final officers = staffMembers
+                                .where((s) => s.role == 'officer')
+                                .toList();
                             final officer = officers[index];
                             return _StaffListItem(
                               officer: officer,
@@ -181,7 +195,9 @@ class StaffManagementScreen extends ConsumerWidget {
                               ),
                             );
                           },
-                          childCount: staffMembers.where((s) => s.role == 'officer').length,
+                          childCount: staffMembers
+                              .where((s) => s.role == 'officer')
+                              .length,
                         ),
                       ),
               ],
@@ -197,9 +213,10 @@ class StaffManagementScreen extends ConsumerWidget {
   void _showInviteStaffDialog(BuildContext context, WidgetRef ref) {
     final emailController = TextEditingController();
     final nameController = TextEditingController();
-    String selectedRole = 'officer';
+    var isSubmitting = false;
+    String? errorMessage;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -225,17 +242,19 @@ class StaffManagementScreen extends ConsumerWidget {
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  DropdownButtonFormField<String>(
-                    value: selectedRole,
-                    decoration: const InputDecoration(labelText: 'Role'),
-                    items: const [
-                      DropdownMenuItem(value: 'officer', child: Text('Officer')),
-                    ],
-                    onChanged: (value) {
-                      setState(() => selectedRole = value!);
-                    },
+                  const SizedBox(height: AppSpacing.sm),
+                  const Text(
+                    'Staff are provisioned as Officers. You can share their temporary password after creation.',
                   ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               actions: [
@@ -244,19 +263,132 @@ class StaffManagementScreen extends ConsumerWidget {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invitation sent!')),
-                    );
-                  },
-                  child: const Text('Send Invite'),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final name = nameController.text.trim();
+                          final email = emailController.text.trim();
+                          final session = ref.read(authSessionProvider);
+                          if (name.isEmpty || email.isEmpty) {
+                            setState(() {
+                              errorMessage = 'Enter a name and email address.';
+                            });
+                            return;
+                          }
+                          if (session == null ||
+                              !session.isOwner ||
+                              !session.hasInstitution) {
+                            setState(() {
+                              errorMessage = 'Your owner session has expired.';
+                            });
+                            return;
+                          }
+
+                          setState(() {
+                            isSubmitting = true;
+                            errorMessage = null;
+                          });
+                          try {
+                            final result = await ref
+                                .read(officerProvisioningServiceProvider)
+                                .provisionOfficer(
+                                  ownerUid: session.userId,
+                                  institutionId: session.institutionId!,
+                                  displayName: name,
+                                  email: email,
+                                );
+                            final hive = ref.read(hiveServiceProvider);
+                            final cachedOfficer = User()
+                              ..id = result.uid
+                              ..institutionId = session.institutionId
+                              ..email = result.email
+                              ..name = name
+                              ..role = 'officer';
+                            final business = hive.getInstitutionById(
+                              session.institutionId!,
+                            );
+                            if (business != null &&
+                                business.hasEverHadAdditionalStaff != true) {
+                              business.hasEverHadAdditionalStaff = true;
+                              await hive.updateInstitution(
+                                business.id,
+                                business,
+                              );
+                            }
+                            await hive.insertUser(cachedOfficer);
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                            _showCredentialsDialog(context, result);
+                          } on OfficerProvisioningException catch (error) {
+                            setState(() {
+                              errorMessage = error.message;
+                            });
+                          } catch (_) {
+                            setState(() {
+                              errorMessage =
+                                  'We could not create this staff account. Try again.';
+                            });
+                          } finally {
+                            if (context.mounted) {
+                              setState(() => isSubmitting = false);
+                            }
+                          }
+                        },
+                  child: Text(isSubmitting ? 'Creating...' : 'Create Officer'),
                 ),
               ],
             );
           },
         );
       },
+    ).whenComplete(() {
+      nameController.dispose();
+      emailController.dispose();
+    });
+  }
+
+  void _showCredentialsDialog(
+    BuildContext context,
+    OfficerProvisioningResult result,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Officer account created'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Email: ${result.email}'),
+            const SizedBox(height: AppSpacing.sm),
+            SelectableText('Temporary password: ${result.temporaryPassword}'),
+            const SizedBox(height: AppSpacing.md),
+            const Text(
+              'Share these credentials through your own secure channel. The officer can change the password later from Settings.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(text: result.temporaryPassword),
+              );
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Temporary password copied')),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy_outlined),
+            label: const Text('Copy password'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -276,6 +408,11 @@ class _CompanyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final pendingStatus = staffStatusPresentation(
+      'pending_leave',
+      colors,
+    );
     return Card(
       margin: const EdgeInsets.all(AppSpacing.screenPadding),
       child: Padding(
@@ -289,10 +426,10 @@ class _CompanyCard extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryContainer,
+                    color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.business, color: AppColors.onPrimaryContainer),
+                  child: Icon(Icons.business, color: colors.onPrimaryContainer),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
@@ -306,7 +443,8 @@ class _CompanyCard extends StatelessWidget {
                       if (institution.address != null)
                         Text(
                           institution.address!,
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.secondary),
+                          style: AppTypography.bodySmall
+                              .copyWith(color: colors.onSurfaceVariant),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -316,7 +454,7 @@ class _CompanyCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: onEditTap,
-                  tooltip: 'Edit Company',
+                  tooltip: 'Edit Business',
                 ),
               ],
             ),
@@ -339,28 +477,25 @@ class _CompanyCard extends StatelessWidget {
               InkWell(
                 onTap: onPendingTap,
                 borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.pending_actions, size: 18, color: AppColors.error),
-                      const SizedBox(width: AppSpacing.sm),
-                      Text(
-                        '$pendingCount pending leave request${pendingCount > 1 ? 's' : ''}',
-                        style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w500),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AppBadge(
+                      presentation: AppBadgePresentation(
+                        label:
+                            '$pendingCount pending leave request${pendingCount > 1 ? 's' : ''}',
+                        backgroundColor: pendingStatus.backgroundColor,
+                        foregroundColor: pendingStatus.foregroundColor,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Icon(Icons.chevron_right, size: 18, color: AppColors.error),
-                    ],
-                  ),
+                      compact: true,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: pendingStatus.foregroundColor,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -379,20 +514,22 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
+        color: colors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.secondary),
+          Icon(icon, size: 14, color: colors.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             text,
-            style: AppTypography.bodySmall.copyWith(color: AppColors.secondary),
+            style: AppTypography.bodySmall
+                .copyWith(color: colors.onSurfaceVariant),
           ),
         ],
       ),
@@ -408,6 +545,11 @@ class _StaffListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final pendingStatus = staffStatusPresentation(
+      officer.status ?? '',
+      colors,
+    );
     return Card(
       margin: const EdgeInsets.symmetric(
         horizontal: AppSpacing.screenPadding,
@@ -420,11 +562,11 @@ class _StaffListItem extends StatelessWidget {
           vertical: AppSpacing.sm,
         ),
         leading: CircleAvatar(
-          backgroundColor: AppColors.surfaceContainerHigh,
+          backgroundColor: colors.surfaceContainerHigh,
           child: Text(
             officer.name.isNotEmpty ? officer.name[0].toUpperCase() : '?',
-            style: const TextStyle(
-              color: AppColors.onSurface,
+            style: TextStyle(
+              color: colors.onSurface,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -435,25 +577,21 @@ class _StaffListItem extends StatelessWidget {
         ),
         subtitle: Text(
           officer.email,
-          style: AppTypography.bodySmall.copyWith(color: AppColors.secondary),
+          style:
+              AppTypography.bodySmall.copyWith(color: colors.onSurfaceVariant),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (officer.status == 'pending_leave')
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'Pending Leave',
-                  style: TextStyle(color: AppColors.error, fontSize: 10),
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: AppBadge(
+                  presentation: pendingStatus,
+                  compact: true,
                 ),
               ),
-            const Icon(Icons.chevron_right, color: AppColors.secondary),
+            Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
           ],
         ),
       ),

@@ -10,6 +10,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../providers/combined_calendar_provider.dart';
 import '../../../../widgets/hourly_grid/hourly_grid.dart';
 import '../../../../extensions/datetime_semantics.dart';
+import '../../../../shared/widgets/app_date_picker_sheet.dart';
 
 class FullCalendarScreen extends ConsumerStatefulWidget {
   const FullCalendarScreen({super.key, required this.initialDate});
@@ -48,11 +49,12 @@ class _FullCalendarScreenState extends ConsumerState<FullCalendarScreen> {
             icon: const Icon(Icons.calendar_today_rounded),
             tooltip: 'Pick Date',
             onPressed: () async {
-              final picked = await showDatePicker(
+              final picked = await showAppDatePicker(
                 context: context,
                 initialDate: _selectedDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2030),
+                minimumDate: DateTime(2020),
+                maximumDate: DateTime(2030),
+                title: 'Select calendar date',
               );
               if (picked != null) {
                 setState(() => _selectedDate = picked);
@@ -91,17 +93,19 @@ class _FullCalendarScreenState extends ConsumerState<FullCalendarScreen> {
                       icon: const Icon(Icons.chevron_left),
                       onPressed: () {
                         setState(() {
-                          _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                          _selectedDate =
+                              _selectedDate.subtract(const Duration(days: 1));
                         });
                       },
                     ),
                     GestureDetector(
                       onTap: () async {
-                        final picked = await showDatePicker(
+                        final picked = await showAppDatePicker(
                           context: context,
                           initialDate: _selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
+                          minimumDate: DateTime(2020),
+                          maximumDate: DateTime(2030),
+                          title: 'Select calendar date',
                         );
                         if (picked != null) {
                           setState(() => _selectedDate = picked);
@@ -116,7 +120,8 @@ class _FullCalendarScreenState extends ConsumerState<FullCalendarScreen> {
                       icon: const Icon(Icons.chevron_right),
                       onPressed: () {
                         setState(() {
-                          _selectedDate = _selectedDate.add(const Duration(days: 1));
+                          _selectedDate =
+                              _selectedDate.add(const Duration(days: 1));
                         });
                       },
                     ),

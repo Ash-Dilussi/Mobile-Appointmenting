@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../../shared/widgets/swipe_to_delete_wrapper.dart';
 import '../../../../shared/widgets/pebble_context_menu.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../../call_history/application/app_call_service.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
@@ -31,9 +31,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(homeHiveProvider);
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Customers'),
         centerTitle: true,
@@ -71,7 +73,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           // Customer List
           Expanded(
             child: StreamBuilder<List<Customer>>(
-              stream: db.watchAllCustomers(),
+              stream: institutionId == null
+                  ? Stream.value(const <Customer>[])
+                  : db.watchCustomersForInstitution(institutionId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -99,23 +103,29 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ),
                   itemCount: customers.length,
                   itemBuilder: (context, index) {
+                    final customer = customers[index];
+                    final customerId = customer.id;
+                    final card = _CustomerCard(
+                      customer: customer,
+                      onTap: customerId == null
+                          ? null
+                          : () {
+                              context.goNamed(
+                                'customer-profile',
+                                pathParameters: {
+                                  'id': customerId.toString(),
+                                },
+                              );
+                            },
+                    );
+                    if (customerId == null) return card;
                     return SwipeToDeleteWrapper(
                       entityName: 'Customer',
                       onDelete: () async {
                         final db = ref.read(homeHiveProvider);
-                        await db.deleteCustomer(customers[index].id!);
+                        await db.deleteCustomer(customerId);
                       },
-                      child: _CustomerCard(
-                        customer: customers[index],
-                        onTap: () {
-                          context.goNamed(
-                            'customer-profile',
-                            pathParameters: {
-                              'id': customers[index].id.toString()
-                            },
-                          );
-                        },
-                      ),
+                      child: card,
                     );
                   },
                 );
@@ -134,7 +144,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
 class _CustomerCard extends ConsumerWidget {
   final Customer customer;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _CustomerCard({
     required this.customer,
@@ -143,40 +153,58 @@ class _CustomerCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
+    final name = customer.name.trim();
+    final displayName = name.isEmpty ? 'Unnamed customer' : name;
+    final phone = customer.phoneNumber.trim();
+    final email = customer.email?.trim() ?? '';
+    final customerId = customer.id;
     return PebbleContextMenuWrapper(
-      title: customer.name,
+      title: displayName,
       actions: [
-        PebbleContextAction(
-          icon: Icons.edit,
-          label: 'Edit',
-          onTap: () {
-            context.goNamed(
-              'edit-customer',
-              pathParameters: {'id': customer.id.toString()},
-            );
-          },
-        ),
-        PebbleContextAction(
-          icon: Icons.call,
-          label: 'Call',
-          onTap: () => _handleCall(context),
-        ),
-        PebbleContextAction(
-          icon: Icons.event,
-          label: 'Book Appointment',
-          onTap: () {
-            context.goNamed(
-              'booking',
-              queryParameters: {'phone': customer.phoneNumber},
-            );
-          },
-        ),
-        PebbleContextAction(
-          icon: Icons.delete,
-          iconColor: AppColors.error,
-          label: 'Delete',
-          onTap: () => _showDeleteDialog(context, ref),
-        ),
+        if (customerId != null)
+          PebbleContextAction(
+            icon: Icons.edit,
+            label: 'Edit',
+            onTap: () {
+              context.goNamed(
+                'edit-customer',
+                pathParameters: {'id': customerId.toString()},
+              );
+            },
+          ),
+        if (customerId != null && phone.isNotEmpty)
+          PebbleContextAction(
+            icon: Icons.call,
+            label: 'Call',
+            onTap: () => _handleCall(context, ref, customerId, phone),
+          ),
+        if (customerId != null || phone.isNotEmpty)
+          PebbleContextAction(
+            icon: Icons.event,
+            label: 'Book Appointment',
+            onTap: () {
+              context.goNamed(
+                'booking',
+                queryParameters: {
+                  if (customerId != null) 'customerId': customerId.toString(),
+                  if (phone.isNotEmpty) 'phone': phone,
+                },
+              );
+            },
+          ),
+        if (customerId != null)
+          PebbleContextAction(
+            icon: Icons.delete,
+            iconColor: colors.error,
+            label: 'Delete',
+            onTap: () => _showDeleteDialog(
+              context,
+              ref,
+              customerId,
+              displayName,
+            ),
+          ),
       ],
       child: InkWell(
         onTap: onTap,
@@ -185,7 +213,7 @@ class _CustomerCard extends ConsumerWidget {
           margin: const EdgeInsets.only(bottom: AppSpacing.md),
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
+            color: colors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           ),
           child: Row(
@@ -194,17 +222,15 @@ class _CustomerCard extends ConsumerWidget {
               Container(
                 width: 48,
                 height: 48,
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryContainer,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
-                    customer.name.isNotEmpty
-                        ? customer.name[0].toUpperCase()
-                        : '?',
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: AppTypography.titleLarge.copyWith(
-                      color: AppColors.onPrimaryContainer,
+                      color: colors.onPrimaryContainer,
                     ),
                   ),
                 ),
@@ -215,26 +241,27 @@ class _CustomerCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      customer.name,
+                      displayName,
                       style: AppTypography.bodyLarge,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      customer.phoneNumber,
-                      style: AppTypography.bodySmall,
-                    ),
-                    if (customer.email != null && customer.email!.isNotEmpty)
+                    if (phone.isNotEmpty)
                       Text(
-                        customer.email!,
+                        phone,
+                        style: AppTypography.bodySmall,
+                      ),
+                    if (email.isNotEmpty)
+                      Text(
+                        email,
                         style: AppTypography.bodySmall,
                         overflow: TextOverflow.ellipsis,
                       ),
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ],
           ),
@@ -243,26 +270,37 @@ class _CustomerCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleCall(BuildContext context) async {
-    final uri = Uri(scheme: 'tel', path: customer.phoneNumber);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open phone dialer')),
+  Future<void> _handleCall(
+    BuildContext context,
+    WidgetRef ref,
+    int customerId,
+    String phone,
+  ) async {
+    final result = await ref.read(appCallServiceProvider).initiateCustomerCall(
+          customerId: customerId,
+          phoneNumber: phone,
         );
-      }
+    final message = result.failureMessage;
+    if (message != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
+  void _showDeleteDialog(
+    BuildContext context,
+    WidgetRef ref,
+    int customerId,
+    String displayName,
+  ) {
+    final colors = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Customer'),
         content: Text(
-          'Are you sure you want to delete "${customer.name}"? This action cannot be undone.',
+          'Are you sure you want to delete "$displayName"? This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -272,11 +310,12 @@ class _CustomerCard extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               final db = ref.read(homeHiveProvider);
-              await db.deleteCustomer(customer.id!);
+              await db.deleteCustomer(customerId);
               if (context.mounted) Navigator.pop(context);
             },
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
+              backgroundColor: colors.error,
+              foregroundColor: colors.onError,
             ),
             child: const Text('Delete'),
           ),
@@ -293,6 +332,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -300,13 +340,13 @@ class _EmptyState extends StatelessWidget {
           Icon(
             hasSearch ? Icons.search_off : Icons.people_outline,
             size: 64,
-            color: AppColors.secondary.withOpacity(0.5),
+            color: colors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
             hasSearch ? 'No customers found' : 'No customers yet',
             style: AppTypography.bodyLarge.copyWith(
-              color: AppColors.secondary,
+              color: colors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: AppSpacing.xs),

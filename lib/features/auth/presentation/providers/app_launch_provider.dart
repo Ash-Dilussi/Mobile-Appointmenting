@@ -37,8 +37,7 @@ class AppLaunchNotifier extends StateNotifier<AppLaunchState> {
   final AuthSessionNotifier _sessionNotifier;
   static const _minSplashDuration = Duration(milliseconds: 1200);
 
-  AppLaunchNotifier(this._sessionNotifier)
-      : super(const AppLaunchChecking()) {
+  AppLaunchNotifier(this._sessionNotifier) : super(const AppLaunchChecking()) {
     _resolve();
   }
 

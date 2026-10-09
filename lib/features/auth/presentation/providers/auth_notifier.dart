@@ -165,12 +165,49 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> onInstitutionLinked({
-    required String institutionId,
-    required UserRole role,
-  }) async {
-    await _repository.linkUserToInstitution(
-        institutionId: institutionId, role: role);
+  Future<bool> deleteAccount({required bool deleteInstitution}) async {
+    state = AuthState.loading();
+    try {
+      await _repository.deleteAccount(deleteInstitution: deleteInstitution);
+      _ref.read(authSessionProvider.notifier).clearSession();
+      state = AuthState.unauthenticated();
+      return true;
+    } on AuthException catch (error) {
+      state = AuthState.error(error.code, error.message);
+      return false;
+    } catch (_) {
+      state = AuthState.error(
+        'account-deletion-failed',
+        'The deletion could not be completed. Please try again.',
+      );
+      return false;
+    }
+  }
+
+  Future<void> onInstitutionProvisioned() async {
+    final user = await _repository.refreshCurrentUser();
+    if (user == null) throw AuthException.noFirebaseUser();
+    await _ref.read(authSessionProvider.notifier).loadSessionFromAuthUser(user);
+    _routeByInstitution(user);
+  }
+
+  Future<void> acknowledgePasswordChangePrompt() async {
+    var currentUser = state.user;
+    try {
+      currentUser ??= await _repository.getCurrentUser();
+      if (currentUser == null) return;
+      await _repository.acknowledgePasswordChangePrompt();
+      _ref.read(authSessionProvider.notifier).acknowledgePasswordChangePrompt();
+      state = AuthState.authenticated(
+        currentUser.copyWith(shouldPromptPasswordChange: false),
+      );
+    } catch (_) {
+      // Skipping this optional prompt must never invalidate a valid session.
+      // Keep it visible so the user can retry when connectivity returns.
+      if (currentUser != null) {
+        state = AuthState.authenticated(currentUser);
+      }
+    }
   }
 
   void clearError() {

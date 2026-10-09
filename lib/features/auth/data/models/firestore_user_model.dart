@@ -9,6 +9,7 @@ class FirestoreUserModel {
   final String role;
   final String institutionId;
   final bool isEmailVerified;
+  final bool shouldPromptPasswordChange;
   final Timestamp createdAt;
 
   const FirestoreUserModel({
@@ -19,6 +20,7 @@ class FirestoreUserModel {
     required this.role,
     required this.institutionId,
     required this.isEmailVerified,
+    this.shouldPromptPasswordChange = false,
     required this.createdAt,
   });
 
@@ -33,6 +35,8 @@ class FirestoreUserModel {
       role: data['role'] as String? ?? 'unknown',
       institutionId: data['institutionId'] as String? ?? '',
       isEmailVerified: data['isEmailVerified'] as bool? ?? false,
+      shouldPromptPasswordChange:
+          data['shouldPromptPasswordChange'] as bool? ?? false,
       createdAt: data['createdAt'] as Timestamp? ?? Timestamp.now(),
     );
   }
@@ -45,6 +49,7 @@ class FirestoreUserModel {
         'role': role,
         'institutionId': institutionId,
         'isEmailVerified': isEmailVerified,
+        'shouldPromptPasswordChange': shouldPromptPasswordChange,
         'createdAt': createdAt,
       };
 
@@ -56,6 +61,7 @@ class FirestoreUserModel {
         role: UserRoleX.fromString(role),
         institutionId: institutionId,
         isEmailVerified: isEmailVerified,
+        shouldPromptPasswordChange: shouldPromptPasswordChange,
         createdAt: createdAt.toDate(),
       );
 
@@ -74,6 +80,7 @@ class FirestoreUserModel {
         role: 'unknown',
         institutionId: '',
         isEmailVerified: isEmailVerified,
+        shouldPromptPasswordChange: false,
         createdAt: Timestamp.now(),
       );
 }

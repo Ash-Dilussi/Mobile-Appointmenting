@@ -29,13 +29,14 @@ class CallLogAdapter extends TypeAdapter<CallLog> {
       ..createdAt = fields[9] as DateTime
       ..synced = fields[10] as bool
       ..institutionId = fields[11] as String?
-      ..handledByUserId = fields[12] as String?;
+      ..handledByUserId = fields[12] as String?
+      ..origin = fields[13] == null ? 'legacy' : fields[13] as String;
   }
 
   @override
   void write(BinaryWriter writer, CallLog obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -61,7 +62,9 @@ class CallLogAdapter extends TypeAdapter<CallLog> {
       ..writeByte(11)
       ..write(obj.institutionId)
       ..writeByte(12)
-      ..write(obj.handledByUserId);
+      ..write(obj.handledByUserId)
+      ..writeByte(13)
+      ..write(obj.origin);
   }
 
   @override

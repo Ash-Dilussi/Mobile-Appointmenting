@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/theme/service_color_palette.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class ServiceDetailScreen extends ConsumerWidget {
@@ -18,6 +19,7 @@ class ServiceDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final db = ref.watch(homeHiveProvider);
     final service = db.getServiceById(serviceId);
     final currencyFormat = NumberFormat.currency(symbol: '\$');
@@ -34,14 +36,24 @@ class ServiceDetailScreen extends ConsumerWidget {
       );
     }
 
+    final savedColor = ServiceColorPalette.resolveOrNull(service.colorValue);
+    // Curated service colors intentionally keep each service's domain identity
+    // across institution presets. Missing/unknown legacy values use the active
+    // institution theme instead of an unrelated palette default.
+    final accentColor = savedColor?.color ?? colors.primary;
+    final onAccentColor = savedColor?.onColor ?? colors.onPrimary;
+
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.goNamed('service-management'),
         ),
-        title: const Text('Service Details'),
+        title: Text(
+          'Service Details',
+          style: TextStyle(color: colors.onSurface),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
@@ -64,24 +76,35 @@ class ServiceDetailScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   Container(
-                    width: 80,
-                    height: 80,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primaryContainer,
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: accentColor,
                       shape: BoxShape.circle,
+                      boxShadow: AppShadows.overlay(accentColor),
                     ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.miscellaneous_services,
-                        size: 36,
-                        color: AppColors.onPrimaryContainer,
+                    child: Center(
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: onAccentColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.miscellaneous_services,
+                          size: 34,
+                          color: accentColor,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     service.title,
-                    style: AppTypography.headlineMedium,
+                    style: AppTypography.headlineMedium.copyWith(
+                      color: colors.onSurface,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -92,16 +115,17 @@ class ServiceDetailScreen extends ConsumerWidget {
                     ),
                     decoration: BoxDecoration(
                       color: service.isActive == false
-                          ? AppColors.error.withValues(alpha: 0.1)
-                          : AppColors.success.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                          ? colors.errorContainer
+                          : colors.tertiaryContainer,
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
                     ),
                     child: Text(
                       service.isActive == false ? 'Inactive' : 'Active',
                       style: AppTypography.labelSmall.copyWith(
                         color: service.isActive == false
-                            ? AppColors.error
-                            : AppColors.success,
+                            ? colors.onErrorContainer
+                            : colors.onTertiaryContainer,
                       ),
                     ),
                   ),
@@ -114,6 +138,7 @@ class ServiceDetailScreen extends ConsumerWidget {
             // Details Card
             _SectionCard(
               title: 'Details',
+              accentColor: accentColor,
               children: [
                 _InfoRow(
                   icon: Icons.schedule,
@@ -140,6 +165,7 @@ class ServiceDetailScreen extends ConsumerWidget {
             // Created/Updated Info
             _SectionCard(
               title: 'Record Info',
+              accentColor: accentColor,
               children: [
                 _InfoRow(
                   icon: Icons.calendar_today,
@@ -162,7 +188,10 @@ class ServiceDetailScreen extends ConsumerWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      context.goNamed('booking');
+                      context.pushNamed(
+                        'booking',
+                        queryParameters: {'serviceId': serviceId.toString()},
+                      );
                     },
                     icon: const Icon(Icons.event),
                     label: const Text('Book Appointment'),
@@ -192,21 +221,25 @@ class ServiceDetailScreen extends ConsumerWidget {
 
 class _SectionCard extends StatelessWidget {
   final String title;
+  final Color accentColor;
   final List<Widget> children;
 
   const _SectionCard({
     required this.title,
+    required this.accentColor,
     required this.children,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: colors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        boxShadow: AppShadows.card(accentColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,7 +247,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             title,
             style: AppTypography.titleSmall.copyWith(
-              color: AppColors.secondary,
+              color: colors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -238,12 +271,14 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppColors.secondary),
+          Icon(icon, size: 20, color: colors.onSurfaceVariant),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -252,13 +287,15 @@ class _InfoRow extends StatelessWidget {
                 Text(
                   label,
                   style: AppTypography.labelSmall.copyWith(
-                    color: AppColors.secondary,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: AppTypography.bodyMedium,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: colors.onSurface,
+                  ),
                 ),
               ],
             ),

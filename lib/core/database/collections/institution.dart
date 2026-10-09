@@ -34,5 +34,12 @@ class Institution extends HiveObject {
   @HiveField(9)
   String? email;
 
+  /// `false` means the business is known to have always had only its owner.
+  /// `true` is permanent once any Officer has been provisioned. `null` keeps
+  /// legacy businesses conservative because their earlier staff history is
+  /// unknown.
+  @HiveField(10, defaultValue: null)
+  bool? hasEverHadAdditionalStaff;
+
   Institution();
 }

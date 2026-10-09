@@ -1,6 +1,8 @@
 export 'customer.dart';
+export 'customer_note.dart';
 export 'service.dart';
 export 'appointment.dart';
+export 'appointment_note.dart';
 export 'call_log.dart';
 export 'sync_queue_item.dart';
 export 'service_station.dart';

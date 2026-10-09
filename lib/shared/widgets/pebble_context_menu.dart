@@ -56,7 +56,7 @@ class _PebbleContextMenuSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        borderRadius: const BorderRadius.vertical(
+        borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppSpacing.radiusXl),
         ),
       ),
@@ -124,9 +124,9 @@ class _PebbleContextMenuSheet extends StatelessWidget {
                   Navigator.pop(context);
                   onCancel?.call();
                 },
-                child: Text(
+                child: const Text(
                   'Cancel',
-                  style: const TextStyle(color: AppColors.secondary),
+                  style: TextStyle(color: AppColors.secondary),
                 ),
               ),
             ),

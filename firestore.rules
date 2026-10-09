@@ -1,137 +1,339 @@
 // firestore.rules
 //
-// Server-side entitlement enforcement.
-// These rules are the security boundary — the client-side FeatureGate is UX only.
-//
+// Prototype production rules for Bookly's current remote data surface.
 // Deploy with: firebase deploy --only firestore:rules
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helper functions ───────────────────────────────────────────────────
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // users/{uid}
+    //   uid: string, required, immutable, equals document id
+    //   email: string, required, <= 254 characters
+    //   displayName: string, required, <= 100 characters
+    //   photoUrl: null|string, optional, <= 2048 characters
+    //   role: unknown|owner|officer, required, server-controlled
+    //   institutionId: string, required, server-controlled
+    //   isEmailVerified: bool, required
+    //   shouldPromptPasswordChange: bool, required
+    //   createdAt: timestamp, required, immutable
+    //   updatedAt: timestamp, optional
+    //   status: active|pending_leave|left, optional, server-controlled
+    //
+    // institutions/{institutionId}
+    //   id: string, required, immutable, equals document id
+    //   ownerId: string, required, immutable
+    //   name: string, required, 1..100 characters
+    //   themePreset: one of the five supported preset names, required
+    //   address: null|string, optional, <= 500 characters
+    //   phone: null|string, optional, <= 50 characters
+    //   email: null|string, optional, <= 254 characters
+    //   logoAsset: null|string, optional, <= 2048 characters
+    //   hasEverHadAdditionalStaff: bool, required, server-controlled
+    //   createdAt: timestamp, required, immutable
+    //   updatedAt: timestamp, required
+    //   provisioningMode: atomic-v1, optional, server-controlled
+    //   provisioningRequestId: string, optional, server-controlled
+    //
+    // businessProvisioning/{requestHash}
+    //   Server-only idempotency receipt. Clients cannot read or write it.
+    //
+    // institutions/{institutionId}/subscription/plan
+    //   Server-written subscription state; institution members may read it.
+    //
+    // All other institution subcollections in this file are dormant/future
+    // server surfaces. The current mobile app stores operational records in
+    // Hive, so client reads and writes are denied until their schemas and sync
+    // protocols are implemented and reviewed.
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
 
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function uidUnchanged(userId) {
+      return request.resource.data.uid == userId;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function validString(value, minLength, maxLength) {
+      return value is string &&
+             value.size() >= minLength &&
+             value.size() <= maxLength;
+    }
+
+    function validNullableString(data, field, maxLength) {
+      return !(field in data) ||
+             data[field] == null ||
+             validString(data[field], 0, maxLength);
+    }
+
+    function validOptionalTimestamp(data, field) {
+      return !(field in data) || data[field] is timestamp;
+    }
+
+    function validOptionalStatus(data) {
+      return !('status' in data) ||
+             data.status in ['active', 'pending_leave', 'left'];
+    }
+
+    function validEmail(value) {
+      return validString(value, 0, 254) &&
+             (value == '' ||
+              value.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'));
+    }
+
+    function validNullableEmail(data, field) {
+      return !(field in data) ||
+             data[field] == null ||
+             validEmail(data[field]);
+    }
+
+    function validThemePreset(value) {
+      return value in [
+        'solarOrange',
+        'clinicTeal',
+        'midnightCharcoal',
+        'forestGreen',
+        'royalPurple'
+      ];
+    }
+
     function isInstitutionMember(institutionId) {
-      // User's custom claim must carry their institutionId
-      // Set this in your Cloud Function after user creation / institution link.
       return isAuthenticated() &&
-             request.auth.token.institutionId == institutionId;
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.institutionId == institutionId &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['owner', 'officer'];
     }
 
     function isInstitutionOwner(institutionId) {
       return isInstitutionMember(institutionId) &&
-             request.auth.token.role == 'owner';
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
     }
 
-    function getSubscription(institutionId) {
-      return get(/databases/$(database)/documents/institutions/$(institutionId)/subscription/plan).data;
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data, userId) {
+      return hasOnlyAllowedFields(data, [
+               'uid',
+               'email',
+               'displayName',
+               'photoUrl',
+               'role',
+               'institutionId',
+               'isEmailVerified',
+               'shouldPromptPasswordChange',
+               'createdAt',
+               'updatedAt',
+               'status'
+             ]) &&
+             hasRequiredFields(data, [
+               'uid',
+               'email',
+               'displayName',
+               'role',
+               'institutionId',
+               'isEmailVerified',
+               'shouldPromptPasswordChange',
+               'createdAt'
+             ]) &&
+             data.uid == userId &&
+             validEmail(data.email) &&
+             validString(data.displayName, 0, 100) &&
+             validNullableString(data, 'photoUrl', 2048) &&
+             data.role in ['unknown', 'owner', 'officer'] &&
+             validString(data.institutionId, 0, 100) &&
+             data.isEmailVerified is bool &&
+             data.shouldPromptPasswordChange is bool &&
+             data.createdAt is timestamp &&
+             validOptionalTimestamp(data, 'updatedAt') &&
+             validOptionalStatus(data);
     }
 
-    function hasTier(institutionId, requiredTier) {
-      let sub = getSubscription(institutionId);
-      // Tier hierarchy: enterprise > pro > free
-      // 'enterprise' satisfies both 'pro' and 'enterprise' requirements.
-      if (requiredTier == 'free') {
-        return true; // everyone has free
-      }
-      if (requiredTier == 'pro') {
-        return sub.tier == 'pro' || sub.tier == 'enterprise';
-      }
-      if (requiredTier == 'enterprise') {
-        return sub.tier == 'enterprise';
-      }
-      return false;
+    function isValidInstitution(data, institutionId) {
+      return hasOnlyAllowedFields(data, [
+               'id',
+               'ownerId',
+               'name',
+               'themePreset',
+               'address',
+               'phone',
+               'email',
+               'logoAsset',
+               'hasEverHadAdditionalStaff',
+               'createdAt',
+               'updatedAt',
+               'provisioningMode',
+               'provisioningRequestId'
+             ]) &&
+             hasRequiredFields(data, [
+               'id',
+               'ownerId',
+               'name',
+               'themePreset',
+               'hasEverHadAdditionalStaff',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             data.id == institutionId &&
+             validString(data.ownerId, 1, 128) &&
+             validString(data.name, 1, 100) &&
+             validThemePreset(data.themePreset) &&
+             validNullableString(data, 'address', 500) &&
+             validNullableString(data, 'phone', 50) &&
+             validNullableEmail(data, 'email') &&
+             validNullableString(data, 'logoAsset', 2048) &&
+             data.hasEverHadAdditionalStaff is bool &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('provisioningMode' in data) ||
+              data.provisioningMode == 'atomic-v1') &&
+             (!('provisioningRequestId' in data) ||
+              validString(data.provisioningRequestId, 64, 64));
     }
 
-    function isNotExpired(institutionId) {
-      let sub = getSubscription(institutionId);
-      // If no expiresAt field, treat as non-expiring (lifetime / manual plan)
-      return !('expiresAt' in sub) ||
-             sub.expiresAt == null ||
-             sub.expiresAt > request.time;
-    }
-
-    function hasActiveProOrAbove(institutionId) {
-      return hasTier(institutionId, 'pro') && isNotExpired(institutionId);
-    }
-
-    function hasActiveEnterprise(institutionId) {
-      return hasTier(institutionId, 'enterprise') && isNotExpired(institutionId);
-    }
-
-    // ── Institution document ───────────────────────────────────────────────
-
-    match /institutions/{institutionId} {
-      allow read: if isInstitutionMember(institutionId);
-      allow write: if isInstitutionOwner(institutionId);
-
-      // ── Subscription sub-document (read-only for clients) ───────────────
-      // Only Cloud Functions (admin SDK) may write to this document.
-      // Clients read it to display plan info in the UI.
-      match /subscription/plan {
-        allow read: if isInstitutionMember(institutionId);
-        allow write: if false; // Cloud Function only (admin SDK bypasses rules)
-      }
-
-      // ── Call recordings (Pro+ feature) ─────────────────────────────────
-      match /recordings/{recordingId} {
-        allow read, write: if isInstitutionMember(institutionId)
-                           && hasActiveProOrAbove(institutionId);
-      }
-
-      // ── Analytics / reports (Pro+ feature) ─────────────────────────────
-      match /analytics/{docId} {
-        allow read: if isInstitutionMember(institutionId)
-                    && hasActiveProOrAbove(institutionId);
-        allow write: if false; // Cloud Functions only
-      }
-
-      // ── Data exports (Pro+ feature) ─────────────────────────────────────
-      match /exports/{exportId} {
-        allow create: if isInstitutionMember(institutionId)
-                      && hasActiveProOrAbove(institutionId);
-        allow read:   if isInstitutionMember(institutionId)
-                      && hasActiveProOrAbove(institutionId);
-        allow delete: if isInstitutionOwner(institutionId);
-        allow update: if false; // immutable once created
-      }
-
-      // ── API keys (Enterprise feature) ──────────────────────────────────
-      match /apiKeys/{keyId} {
-        allow read, write: if isInstitutionOwner(institutionId)
-                           && hasActiveEnterprise(institutionId);
-      }
-
-      // ── General institution data (free — all members) ───────────────────
-      match /callLogs/{logId} {
-        allow read, write: if isInstitutionMember(institutionId);
-      }
-
-      match /appointments/{apptId} {
-        allow read, write: if isInstitutionMember(institutionId);
-      }
-
-      // ── Staff members (multiUser is Pro+, but owners can always manage) ─
-      match /members/{memberId} {
-        allow read:   if isInstitutionMember(institutionId);
-        allow create,
-              delete: if isInstitutionOwner(institutionId)
-                      && hasActiveProOrAbove(institutionId);
-        allow update: if isInstitutionOwner(institutionId);
-      }
-    }
-
-    // ── User profiles ──────────────────────────────────────────────────────
+    // ===============================================================
+    // User Profiles
+    // ===============================================================
 
     match /users/{userId} {
-      allow read:   if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && request.auth.uid == userId;
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow delete: if false; // soft-delete via Cloud Function only
+      // User documents contain email and other PII. Never expose one user's
+      // complete document to another client.
+      allow read: if isOwner(userId);
+
+      // A client may create only its own unlinked skeleton. Owner/officer
+      // membership is created exclusively by trusted callable functions.
+      allow create: if isOwner(userId) &&
+                       uidUnchanged(userId) &&
+                       isValidUser(request.resource.data, userId) &&
+                       request.resource.data.role == 'unknown' &&
+                       request.resource.data.institutionId == '';
+
+      // Self-service profile changes cannot mutate membership, role, status,
+      // identity, or the original creation timestamp.
+      allow update: if isOwner(userId) &&
+                       uidNotModified() &&
+                       isValidUser(request.resource.data, userId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly([
+                           'email',
+                           'displayName',
+                           'photoUrl',
+                           'isEmailVerified',
+                           'shouldPromptPasswordChange',
+                           'updatedAt'
+                         ]) &&
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.institutionId == resource.data.institutionId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.resource.data.uid == resource.data.uid &&
+                       (!('status' in resource.data) ||
+                        request.resource.data.status == resource.data.status);
+
+      allow delete: if false;
+    }
+
+    // ===============================================================
+    // Institution Documents
+    // ===============================================================
+
+    match /institutions/{institutionId} {
+      allow read: if isInstitutionMember(institutionId) ||
+                     (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+
+      // Provisioning and deletion are identity-adjacent operations. Only the
+      // Admin SDK callables may perform them.
+      allow create, delete: if false;
+
+      allow update: if isInstitutionOwner(institutionId) &&
+                       isValidInstitution(request.resource.data, institutionId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly([
+                           'name',
+                           'themePreset',
+                           'address',
+                           'phone',
+                           'email',
+                           'logoAsset',
+                           'updatedAt'
+                         ]) &&
+                       request.resource.data.id == resource.data.id &&
+                       request.resource.data.ownerId == resource.data.ownerId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.resource.data.hasEverHadAdditionalStaff ==
+                         resource.data.hasEverHadAdditionalStaff &&
+                       (!('provisioningMode' in resource.data) ||
+                        request.resource.data.provisioningMode ==
+                          resource.data.provisioningMode) &&
+                       (!('provisioningRequestId' in resource.data) ||
+                        request.resource.data.provisioningRequestId ==
+                          resource.data.provisioningRequestId);
+
+      match /subscription/plan {
+        allow read: if isInstitutionMember(institutionId);
+        allow write: if false;
+      }
+
+      match /recordings/{recordingId} {
+        allow read, write: if false;
+      }
+
+      match /analytics/{docId} {
+        allow read, write: if false;
+      }
+
+      match /exports/{exportId} {
+        allow read, write: if false;
+      }
+
+      match /apiKeys/{keyId} {
+        allow read, write: if false;
+      }
+
+      match /callLogs/{logId} {
+        allow read, write: if false;
+      }
+
+      match /appointments/{appointmentId} {
+        allow read, write: if false;
+      }
+
+      match /members/{memberId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /businessProvisioning/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

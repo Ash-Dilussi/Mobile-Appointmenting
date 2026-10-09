@@ -45,7 +45,8 @@ class RecordingEvent {
 /// Uses device microphone with privacy notice: "Recorded for customer safety"
 class CallRecordingService {
   static const _channel = MethodChannel('com.ashDilussi.bookly/recording');
-  static const _eventChannel = EventChannel('com.ashDilussi.bookly/recording_events');
+  static const _eventChannel =
+      EventChannel('com.ashDilussi.bookly/recording_events');
 
   StreamSubscription<RecordingEvent>? _eventSubscription;
 
@@ -135,12 +136,27 @@ class CallRecordingService {
 
   /// Request recording permission via permission_handler
   Future<PermissionStatus> requestMicPermission() async {
+    if (!await _isDormantIntegrationEnabled()) {
+      return PermissionStatus.denied;
+    }
     return await Permission.microphone.request();
   }
 
   /// Check microphone permission status
   Future<PermissionStatus> checkMicPermission() async {
+    if (!await _isDormantIntegrationEnabled()) {
+      return PermissionStatus.denied;
+    }
     return await Permission.microphone.status;
+  }
+
+  Future<bool> _isDormantIntegrationEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('isFeatureEnabled') ?? false;
+    } catch (e) {
+      debugPrint('Error checking recording feature gate: $e');
+      return false;
+    }
   }
 
   /// Check if currently recording

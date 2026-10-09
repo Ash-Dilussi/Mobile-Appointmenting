@@ -21,6 +21,8 @@ class CachedUserProfile extends HiveObject {
   final bool isEmailVerified;
   @HiveField(7)
   final int createdAtMs;
+  @HiveField(8, defaultValue: false)
+  final bool shouldPromptPasswordChange;
 
   CachedUserProfile({
     required this.uid,
@@ -31,6 +33,7 @@ class CachedUserProfile extends HiveObject {
     required this.institutionId,
     required this.isEmailVerified,
     required this.createdAtMs,
+    this.shouldPromptPasswordChange = false,
   });
 
   factory CachedUserProfile.fromAuthUser(AuthUser user) => CachedUserProfile(
@@ -42,6 +45,7 @@ class CachedUserProfile extends HiveObject {
         institutionId: user.institutionId,
         isEmailVerified: user.isEmailVerified,
         createdAtMs: user.createdAt.millisecondsSinceEpoch,
+        shouldPromptPasswordChange: user.shouldPromptPasswordChange,
       );
 
   AuthUser toAuthUser() => AuthUser(
@@ -52,6 +56,7 @@ class CachedUserProfile extends HiveObject {
         role: UserRoleX.fromString(roleString),
         institutionId: institutionId,
         isEmailVerified: isEmailVerified,
+        shouldPromptPasswordChange: shouldPromptPasswordChange,
         createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
       );
 }

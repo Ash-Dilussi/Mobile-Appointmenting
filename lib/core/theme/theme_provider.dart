@@ -4,7 +4,8 @@ import '../database/hive_service.dart';
 import '../providers/hive_service_provider.dart';
 
 /// Provider for the current theme mode
-final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
+final themeModeProvider =
+    StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
   final hiveService = ref.watch(hiveServiceProvider);
   return ThemeModeNotifier(hiveService);
 });
@@ -12,7 +13,8 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((r
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   final HiveService _hiveService;
 
-  ThemeModeNotifier(this._hiveService) : super(_parseThemeMode(_hiveService.getThemeMode()));
+  ThemeModeNotifier(this._hiveService)
+      : super(_parseThemeMode(_hiveService.getThemeMode()));
 
   static ThemeMode _parseThemeMode(String mode) {
     switch (mode) {

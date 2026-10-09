@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/error/auth_exception.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart'
+    show authNotifierProvider;
+import '../../../auth/presentation/providers/auth_providers.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  ConsumerState<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() =>
+      _ChangePasswordScreenState();
 }
 
 class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
@@ -33,47 +36,54 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   }
 
   Future<void> _handleChangePassword() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      setState(() => _isLoading = true);
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _isLoading = true);
 
-      final success = await ref.read(authStateProvider.notifier).changePassword(
-            _currentPasswordController.text,
-            _newPasswordController.text,
+    try {
+      await ref.read(authRepositoryProvider).changePassword(
+            currentPassword: _currentPasswordController.text,
+            newPassword: _newPasswordController.text,
           );
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Password changed successfully'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          context.canPop() ? context.pop() : context.goNamed('settings');
-        }
-      }
+      await ref
+          .read(authNotifierProvider.notifier)
+          .acknowledgePasswordChangePrompt();
+      if (!mounted) return;
+      final colors = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Password changed successfully'),
+          backgroundColor: colors.primary,
+        ),
+      );
+      context.canPop() ? context.pop() : context.goNamed('settings');
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      final message = switch (error.code) {
+        'wrong-password' ||
+        'invalid-credential' =>
+          'Current password is incorrect.',
+        'weak-password' => 'Choose a stronger password.',
+        'requires-recent-login' =>
+          'Please sign in again before changing your password.',
+        _ => 'We could not change your password. Please try again.',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(authStateProvider);
-
-    ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.error != null && next.error != previous?.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    });
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Change Password'),
         centerTitle: true,
@@ -97,17 +107,16 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryContainer.withValues(alpha: 0.2),
+                    color: colors.primaryContainer.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: AppColors.primary),
+                      Icon(Icons.info_outline, color: colors.primary),
                       const SizedBox(width: AppSpacing.md),
-                      Expanded(
+                      const Expanded(
                         child: Text(
                           'Enter your current password, then choose a new password.',
-                          style: TextStyle(color: AppColors.secondary),
                         ),
                       ),
                     ],
@@ -225,16 +234,17 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(double.infinity, 56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
                     ),
                   ),
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.onPrimaryContainer,
+                            color: colors.onPrimary,
                           ),
                         )
                       : const Text('Change Password'),
@@ -246,9 +256,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                 Center(
                   child: TextButton(
                     onPressed: () => context.goNamed('forgot-password'),
-                    child: const Text(
+                    child: Text(
                       'Forgot your password?',
-                      style: TextStyle(color: AppColors.primary),
+                      style: TextStyle(color: colors.primary),
                     ),
                   ),
                 ),

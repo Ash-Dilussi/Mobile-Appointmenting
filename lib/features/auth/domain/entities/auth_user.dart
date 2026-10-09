@@ -8,6 +8,7 @@ class AuthUser {
   final UserRole role;
   final String institutionId;
   final bool isEmailVerified;
+  final bool shouldPromptPasswordChange;
   final DateTime createdAt;
 
   const AuthUser({
@@ -18,6 +19,7 @@ class AuthUser {
     required this.role,
     required this.institutionId,
     required this.isEmailVerified,
+    this.shouldPromptPasswordChange = false,
     required this.createdAt,
   });
 
@@ -33,6 +35,7 @@ class AuthUser {
     UserRole? role,
     String? institutionId,
     bool? isEmailVerified,
+    bool? shouldPromptPasswordChange,
     DateTime? createdAt,
   }) {
     return AuthUser(
@@ -43,6 +46,8 @@ class AuthUser {
       role: role ?? this.role,
       institutionId: institutionId ?? this.institutionId,
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
+      shouldPromptPasswordChange:
+          shouldPromptPasswordChange ?? this.shouldPromptPasswordChange,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -50,9 +55,7 @@ class AuthUser {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is AuthUser &&
-          runtimeType == other.runtimeType &&
-          uid == other.uid;
+      other is AuthUser && runtimeType == other.runtimeType && uid == other.uid;
 
   @override
   int get hashCode => uid.hashCode;

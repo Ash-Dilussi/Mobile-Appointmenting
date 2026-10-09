@@ -17,8 +17,10 @@ class ActiveCallState {
 
 /// Call detection service for Android native call detection
 class CallDetectionService {
-  static const _methodChannel = MethodChannel('com.ashDilussi.bookly/call_detection');
-  static const _eventChannel = EventChannel('com.ashDilussi.bookly/call_events');
+  static const _methodChannel =
+      MethodChannel('com.ashDilussi.bookly/call_detection');
+  static const _eventChannel =
+      EventChannel('com.ashDilussi.bookly/call_events');
 
   Stream<Map<String, dynamic>>? _callEventStream;
 
@@ -37,7 +39,8 @@ class CallDetectionService {
   /// Request call detection permission
   Future<bool> requestPermission() async {
     try {
-      final result = await _methodChannel.invokeMethod<bool>('requestPermission');
+      final result =
+          await _methodChannel.invokeMethod<bool>('requestPermission');
       return result ?? false;
     } catch (e, st) {
       logger.error('CallDetectionService', 'Permission request failed: $e',
@@ -102,7 +105,8 @@ class ActiveCallNotifier extends StateNotifier<ActiveCallState> {
 }
 
 /// Active call state provider
-final activeCallProvider = StateNotifierProvider<ActiveCallNotifier, ActiveCallState>((ref) {
+final activeCallProvider =
+    StateNotifierProvider<ActiveCallNotifier, ActiveCallState>((ref) {
   final service = ref.watch(callDetectionServiceProvider);
   return ActiveCallNotifier(service);
 });

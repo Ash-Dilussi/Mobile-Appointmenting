@@ -18,21 +18,25 @@ class CustomerAdapter extends TypeAdapter<Customer> {
     };
     return Customer()
       ..id = fields[0] as int?
-      ..phoneNumber = fields[1] as String
-      ..name = fields[2] as String
-      ..email = fields[3] as String?
-      ..notes = fields[4] as String?
-      ..address = fields[5] as String?
-      ..createdAt = fields[6] as DateTime
-      ..updatedAt = fields[7] as DateTime
-      ..synced = fields[8] as bool
-      ..institutionId = fields[9] as String?;
+      ..phoneNumber = fields[1] == null ? '' : fields[1] as String
+      ..name = fields[2] == null ? '' : fields[2] as String
+      ..email = fields[3] == null ? '' : fields[3] as String?
+      ..legacyNotes = fields[4] == null ? '' : fields[4] as String?
+      ..address = fields[5] == null ? '' : fields[5] as String?
+      ..createdAt = fields[6] as DateTime?
+      ..updatedAt = fields[7] as DateTime?
+      ..synced = fields[8] == null ? false : fields[8] as bool
+      ..institutionId = fields[9] as String?
+      ..dob = fields[10] as DateTime?
+      ..notes =
+          fields[11] == null ? [] : (fields[11] as List).cast<CustomerNote>()
+      ..city = fields[12] == null ? '' : fields[12] as String?;
   }
 
   @override
   void write(BinaryWriter writer, Customer obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -42,7 +46,7 @@ class CustomerAdapter extends TypeAdapter<Customer> {
       ..writeByte(3)
       ..write(obj.email)
       ..writeByte(4)
-      ..write(obj.notes)
+      ..write(obj.legacyNotes)
       ..writeByte(5)
       ..write(obj.address)
       ..writeByte(6)
@@ -52,7 +56,13 @@ class CustomerAdapter extends TypeAdapter<Customer> {
       ..writeByte(8)
       ..write(obj.synced)
       ..writeByte(9)
-      ..write(obj.institutionId);
+      ..write(obj.institutionId)
+      ..writeByte(10)
+      ..write(obj.dob)
+      ..writeByte(11)
+      ..write(obj.notes)
+      ..writeByte(12)
+      ..write(obj.city);
   }
 
   @override

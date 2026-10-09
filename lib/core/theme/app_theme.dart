@@ -16,18 +16,24 @@ class AppTheme {
   }
 
   /// Creates ThemeData for default Solar Orange preset.
-  static ThemeData get lightTheme => fromPreset(StylePreset.solarOrange, Brightness.light);
-  static ThemeData get darkTheme => fromPreset(StylePreset.solarOrange, Brightness.dark);
+  static ThemeData get lightTheme =>
+      fromPreset(StylePreset.solarOrange, Brightness.light);
+  static ThemeData get darkTheme =>
+      fromPreset(StylePreset.solarOrange, Brightness.dark);
 
   static ThemeData _buildTheme(ColorScheme colorScheme, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
+    final textTheme = AppTypography.textTheme.apply(
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
-      textTheme: AppTypography.textTheme,
+      textTheme: textTheme,
 
       // AppBar Theme
       appBarTheme: AppBarTheme(
@@ -36,8 +42,9 @@ class AppTheme {
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         centerTitle: true,
-        titleTextStyle: AppTypography.titleLarge,
-        systemOverlayStyle: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        titleTextStyle: textTheme.titleLarge,
+        systemOverlayStyle:
+            isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       ),
 
       // Bottom Navigation Bar Theme
@@ -47,10 +54,10 @@ class AppTheme {
         selectedItemColor: colorScheme.primary,
         unselectedItemColor: colorScheme.secondary,
         type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: AppTypography.labelMedium.copyWith(
+        selectedLabelStyle: textTheme.labelMedium?.copyWith(
           fontWeight: FontWeight.w600,
         ),
-        unselectedLabelStyle: AppTypography.labelMedium,
+        unselectedLabelStyle: textTheme.labelMedium,
       ),
 
       // Navigation Bar Theme (Material 3)
@@ -60,12 +67,12 @@ class AppTheme {
         indicatorColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppTypography.labelMedium.copyWith(
+            return textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: colorScheme.primary,
             );
           }
-          return AppTypography.labelMedium.copyWith(
+          return textTheme.labelMedium?.copyWith(
             color: colorScheme.secondary,
           );
         }),
@@ -93,11 +100,11 @@ class AppTheme {
           backgroundColor: colorScheme.primaryContainer,
           foregroundColor: colorScheme.onPrimaryContainer,
           elevation: 0,
-          minimumSize: Size(double.infinity, AppSpacing.buttonMinHeight),
+          minimumSize: const Size(double.infinity, AppSpacing.buttonMinHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
           ),
-          textStyle: AppTypography.labelLarge,
+          textStyle: textTheme.labelLarge,
         ),
       ),
 
@@ -106,11 +113,11 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: colorScheme.primaryContainer,
           foregroundColor: colorScheme.onPrimaryContainer,
-          minimumSize: Size(double.infinity, AppSpacing.buttonMinHeight),
+          minimumSize: const Size(double.infinity, AppSpacing.buttonMinHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
           ),
-          textStyle: AppTypography.labelLarge,
+          textStyle: textTheme.labelLarge,
         ),
       ),
 
@@ -118,14 +125,14 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          minimumSize: Size(double.infinity, AppSpacing.buttonMinHeight),
+          minimumSize: const Size(double.infinity, AppSpacing.buttonMinHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
           ),
           side: BorderSide(
             color: colorScheme.outline.withValues(alpha: 0.3),
           ),
-          textStyle: AppTypography.labelLarge,
+          textStyle: textTheme.labelLarge,
         ),
       ),
 
@@ -133,7 +140,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          textStyle: AppTypography.labelLarge,
+          textStyle: textTheme.labelLarge,
         ),
       ),
 
@@ -151,7 +158,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colorScheme.surfaceContainerLowest,
-        contentPadding: EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.md,
         ),
@@ -185,11 +192,11 @@ class AppTheme {
             width: 2,
           ),
         ),
-        labelStyle: AppTypography.bodyMedium,
-        hintStyle: AppTypography.bodyMedium.copyWith(
+        labelStyle: textTheme.bodyMedium,
+        hintStyle: textTheme.bodyMedium?.copyWith(
           color: colorScheme.secondary,
         ),
-        errorStyle: AppTypography.bodySmall.copyWith(
+        errorStyle: textTheme.bodySmall?.copyWith(
           color: colorScheme.error,
         ),
       ),
@@ -212,14 +219,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
         ),
         elevation: 8,
-        titleTextStyle: AppTypography.titleLarge,
-        contentTextStyle: AppTypography.bodyMedium,
+        titleTextStyle: textTheme.titleLarge,
+        contentTextStyle: textTheme.bodyMedium,
       ),
 
       // Snackbar Theme
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.secondary,
-        contentTextStyle: AppTypography.bodyMedium.copyWith(
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
           color: colorScheme.onSecondary,
         ),
         shape: RoundedRectangleBorder(
@@ -239,7 +246,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surfaceContainerHigh,
         selectedColor: colorScheme.primaryContainer,
-        labelStyle: AppTypography.labelMedium,
+        labelStyle: textTheme.labelMedium,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
@@ -248,15 +255,15 @@ class AppTheme {
 
       // List Tile Theme
       listTileTheme: ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.xs,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
-        titleTextStyle: AppTypography.bodyLarge,
-        subtitleTextStyle: AppTypography.bodySmall,
+        titleTextStyle: textTheme.bodyLarge,
+        subtitleTextStyle: textTheme.bodySmall,
       ),
 
       // Icon Theme

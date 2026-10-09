@@ -23,10 +23,8 @@ Map<CalendarBlock, int> assignLanes(List<CalendarBlock> blocks) {
   final lanes = <CalendarBlock, int>{};
   for (final block in blocks) {
     final overlapping = blocks
-        .where((b) =>
-            b != block &&
-            b.overlapsWith(block) &&
-            lanes.containsKey(b))
+        .where(
+            (b) => b != block && b.overlapsWith(block) && lanes.containsKey(b))
         .map((b) => lanes[b]!)
         .toSet();
     var lane = 0;

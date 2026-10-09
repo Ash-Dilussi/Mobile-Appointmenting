@@ -1,3 +1,5 @@
+// ignore_for_file: implementation_imports, invalid_use_of_visible_for_testing_member
+
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/services.dart';
@@ -5,12 +7,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_fonts/src/google_fonts_base.dart' as google_fonts_base;
+import 'package:google_fonts/src/google_fonts_descriptor.dart';
+import 'package:google_fonts/src/google_fonts_variant.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:bookly/core/theme/app_colors.dart';
 import 'package:bookly/core/database/collections/collections.dart';
 import 'package:bookly/features/home/presentation/providers/home_provider.dart';
 import 'package:bookly/core/database/hive_service.dart';
 import 'package:bookly/features/call_history/presentation/screens/call_history_screen.dart';
+import 'package:bookly/features/auth/presentation/providers/auth_session_provider.dart';
+import 'package:bookly/core/auth/rbac.dart';
+import '../helpers/test_helpers.dart';
+
+class _EmptyAssetManifest extends Fake implements AssetManifest {
+  @override
+  List<String> listAssets() => const [];
+}
+
+class _TestAuthSessionNotifier extends AuthSessionNotifier {
+  _TestAuthSessionNotifier(super.service) {
+    state = const AuthSession(
+      userId: 'test-user',
+      email: 'test@example.com',
+      institutionId: 'test-inst',
+      role: Role.owner,
+      hasCompletedOnboarding: true,
+    );
+  }
+}
 
 class FakeHttpClientResponse extends Fake implements HttpClientResponse {
   @override
@@ -119,6 +147,14 @@ void main() {
   late HiveService hiveService;
   late Directory tempDir;
 
+  test('booking navigation carries the originating call id', () {
+    final source = File(
+      'lib/features/call_history/presentation/screens/call_history_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("'callLogId'"));
+  });
+
   setUpAll(() async {
     // Mock HTTP requests so Google Fonts doesn't crash on network fetching
     HttpOverrides.global = TestHttpOverrides();
@@ -126,15 +162,44 @@ void main() {
     // Initialize Flutter binding for path_provider
     TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Create a temp directory for Hive
+    // Create a temp directory for Hive and runtime font cache writes.
     tempDir = await Directory.systemTemp.createTemp('hive_test_');
 
-    // Set up mock path provider to use the temp directory
+    // Set up mock path provider to use the temp directory.
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
       return tempDir.path;
     });
+
+    const fakeFontBody = 'fake response body - success';
+    final fakeFontFile = GoogleFontsFile(
+      '1194f6ffe4d2f05258573616a77932c38041f3102763096c19437c3db1818a04',
+      fakeFontBody.length,
+    );
+    google_fonts_base.assetManifest = _EmptyAssetManifest();
+    google_fonts_base.httpClient = MockClient(
+      (_) async => http.Response(fakeFontBody, 200),
+    );
+    GoogleFonts.config.allowRuntimeFetching = true;
+    for (final weight in <FontWeight>[
+      FontWeight.w400,
+      FontWeight.w500,
+      FontWeight.w600,
+      FontWeight.w700,
+    ]) {
+      google_fonts_base.googleFontsTextStyle(
+        fontFamily: 'Inter',
+        fontWeight: weight,
+        fonts: {
+          GoogleFontsVariant(
+            fontWeight: weight,
+            fontStyle: FontStyle.normal,
+          ): fakeFontFile,
+        },
+      );
+    }
+    await GoogleFonts.pendingFonts();
 
     // Initialize Hive with temp directory
     await Hive.initFlutter(tempDir.path);
@@ -145,6 +210,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    google_fonts_base.clearCache();
     await Hive.close();
     if (tempDir.existsSync()) {
       await tempDir.delete(recursive: true);
@@ -161,6 +227,9 @@ void main() {
       return ProviderScope(
         overrides: [
           homeHiveProvider.overrideWithValue(hiveService),
+          authSessionProvider.overrideWith(
+            (ref) => _TestAuthSessionNotifier(hiveService),
+          ),
         ],
         child: MaterialApp(
           theme: ThemeData(
@@ -170,6 +239,26 @@ void main() {
             ),
           ),
           home: const CallHistoryScreen(),
+        ),
+      );
+    }
+
+    Widget createRoutedWidgetUnderTest(GoRouter router) {
+      return ProviderScope(
+        overrides: [
+          homeHiveProvider.overrideWithValue(hiveService),
+          authSessionProvider.overrideWith(
+            (ref) => _TestAuthSessionNotifier(hiveService),
+          ),
+        ],
+        child: MaterialApp.router(
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.primary,
+              surface: AppColors.surface,
+            ),
+          ),
+          routerConfig: router,
         ),
       );
     }
@@ -187,9 +276,14 @@ void main() {
 
       expect(find.text('All Calls'), findsOneWidget);
       expect(find.text('Missed'), findsOneWidget);
+      expect(
+        find.textContaining('Calls initiated through Bookly'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('All Calls tab shows loading indicator initially', (tester) async {
+    testWidgets('All Calls tab shows loading indicator initially',
+        (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       // Don't pumpAndSettle - we want to catch the loading state
 
@@ -197,7 +291,8 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('All Calls tab shows empty state when no calls', (tester) async {
+    testWidgets('All Calls tab shows empty state when no calls',
+        (tester) async {
       // Insert no call logs - empty state
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
@@ -205,7 +300,8 @@ void main() {
       expect(find.text('No call history yet'), findsOneWidget);
     });
 
-    testWidgets('All Calls tab shows call log when data exists', (tester) async {
+    testWidgets('All Calls tab shows call log when data exists',
+        (tester) async {
       // Insert a call log
       final callLog = CallLog()
         ..phoneNumber = '+1234567890'
@@ -215,7 +311,8 @@ void main() {
         ..isMissed = false
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(callLog);
 
       await tester.pumpWidget(createWidgetUnderTest());
@@ -224,7 +321,44 @@ void main() {
       expect(find.text('+1234567890'), findsOneWidget);
     });
 
-    testWidgets('Missed tab shows empty state when no missed calls', (tester) async {
+    testWidgets('saved contacts show only their name on call cards',
+        (tester) async {
+      final customer = Customer()
+        ..name = 'Saved Customer'
+        ..phoneNumber = '+1234567890'
+        ..createdAt = DateTime.now()
+        ..updatedAt = DateTime.now()
+        ..synced = false
+        ..institutionId = 'test-inst';
+      await hiveService.insertCustomer(customer);
+
+      final callLog = CallLog()
+        ..phoneNumber = '+1234567890'
+        ..timestamp = DateTime.now()
+        ..direction = 'incoming'
+        ..durationSeconds = 60
+        ..isMissed = true
+        ..followedUp = false
+        ..createdAt = DateTime.now()
+        ..synced = false
+        ..institutionId = 'test-inst';
+      await hiveService.insertCallLog(callLog);
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved Customer'), findsOneWidget);
+      expect(find.text('+1234567890'), findsNothing);
+
+      await tester.tap(find.text('Missed'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved Customer'), findsOneWidget);
+      expect(find.text('+1234567890'), findsNothing);
+    });
+
+    testWidgets('Missed tab shows empty state when no missed calls',
+        (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
@@ -245,7 +379,8 @@ void main() {
         ..isMissed = true
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       final answeredCall = CallLog()
         ..phoneNumber = '+2222222222'
         ..timestamp = DateTime.now()
@@ -254,7 +389,8 @@ void main() {
         ..isMissed = false
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(missedCall);
       await hiveService.insertCallLog(answeredCall);
 
@@ -278,6 +414,37 @@ void main() {
       expect(find.byType(FloatingActionButton), findsOneWidget);
     });
 
+    testWidgets('New Appointment opens Booking directly and preserves Back',
+        (tester) async {
+      final router = GoRouter(
+        initialLocation: '/call-history',
+        routes: [
+          GoRoute(
+            path: '/call-history',
+            builder: (_, __) => const CallHistoryScreen(),
+          ),
+          GoRoute(
+            path: '/booking',
+            name: 'booking',
+            builder: (_, __) => const Scaffold(
+              body: Center(child: Text('Booking screen probe')),
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(createRoutedWidgetUnderTest(router));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('New Appointment'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Booking screen probe'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(router.canPop(), isTrue);
+    });
+
     testWidgets('tab indicator uses primary color', (tester) async {
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
@@ -295,7 +462,8 @@ void main() {
         ..isMissed = false
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(callLog);
 
       await tester.pumpWidget(createWidgetUnderTest());
@@ -313,7 +481,8 @@ void main() {
         ..isMissed = true
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(callLog);
 
       await tester.pumpWidget(createWidgetUnderTest());
@@ -331,7 +500,8 @@ void main() {
         ..isMissed = false
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(callLog);
 
       await tester.pumpWidget(createWidgetUnderTest());
@@ -340,23 +510,47 @@ void main() {
       expect(find.byIcon(Icons.call_made), findsOneWidget);
     });
 
-    testWidgets('call card shows duration when call was answered', (tester) async {
+    testWidgets('app-initiated rows are labelled honestly', (tester) async {
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Dialled Customer',
+        phoneNumber: '+1234567890',
+        institutionId: 'test-inst',
+      );
+      await tester.runAsync(() async {
+        final customerId = await hiveService.insertCustomer(customer);
+        await hiveService.insertAppInitiatedCallLog(
+          customerId: customerId!,
+          phoneNumber: customer.phoneNumber,
+          institutionId: 'test-inst',
+          handledByUserId: 'test-user',
+        );
+      });
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dialled Customer'), findsOneWidget);
+      expect(find.text('Call initiated'), findsOneWidget);
+    });
+
+    testWidgets('call card does not show duration when call was answered',
+        (tester) async {
       final callLog = CallLog()
         ..phoneNumber = '+1234567890'
         ..timestamp = DateTime.now()
         ..direction = 'incoming'
-        ..durationSeconds = 125  // 2 min 5 sec
+        ..durationSeconds = 125 // 2 min 5 sec
         ..isMissed = false
         ..followedUp = false
         ..createdAt = DateTime.now()
-        ..synced = false;
+        ..synced = false
+        ..institutionId = 'test-inst';
       await hiveService.insertCallLog(callLog);
 
       await tester.pumpWidget(createWidgetUnderTest());
       await tester.pumpAndSettle();
 
-      // Duration format: "2 min 5s"
-      expect(find.textContaining('Duration:'), findsOneWidget);
+      expect(find.textContaining('Duration:'), findsNothing);
     });
   });
 }

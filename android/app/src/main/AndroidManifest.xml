@@ -2,14 +2,10 @@
 
     <!-- ── Call detection ──────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!-- ── Audio recording ─────────────────────────────────────────────────── -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- ── Contact import ──────────────────────────────────────────────────── -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-
+    <!-- Contact import uses the OS-owned picker and needs no broad permission. -->
     <!-- ── Storage (API < 29 fallback if saving to external) ─────────────── -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

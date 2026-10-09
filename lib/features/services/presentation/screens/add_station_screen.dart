@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../../core/logging/logger_service.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 class AddStationScreen extends ConsumerStatefulWidget {
@@ -82,6 +83,7 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
 
       if (_isEditing && _existingStation != null) {
         final updated = ServiceStation()
+          ..institutionId = _existingStation!.institutionId
           ..name = name
           ..address = address.isNotEmpty ? address : null
           ..phone = phone.isNotEmpty ? phone : null
@@ -91,8 +93,12 @@ class _AddStationScreenState extends ConsumerState<AddStationScreen> {
           ..synced = false;
         await db.updateServiceStation(_existingStation!.id!, updated);
       } else {
-
+        final institutionId = ref.read(authSessionProvider)?.institutionId;
+        if (institutionId == null || institutionId.isEmpty) {
+          throw StateError('An institution is required to create a station.');
+        }
         final newStation = ServiceStation()
+          ..institutionId = institutionId
           ..name = name
           ..address = address.isNotEmpty ? address : null
           ..phone = phone.isNotEmpty ? phone : null

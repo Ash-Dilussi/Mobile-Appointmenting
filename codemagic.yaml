@@ -1,0 +1,104 @@
+workflows:
+  ios-testflight:
+    name: iOS signed release to TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      groups:
+        # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID,
+        # and APP_STORE_CONNECT_PRIVATE_KEY.
+        - appstore_credentials
+        # IOS_FIREBASE_CONFIG_BASE64: base64-encoded real
+        # ios/Runner/GoogleService-Info.plist from Firebase project bookly-1f5f7.
+        - firebase_credentials
+      vars:
+        # Provisional until the App Store Connect app registration confirms it.
+        BUNDLE_ID: com.ashDilussi.bookly
+      flutter: 3.32.5
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Restore and validate iOS Firebase configuration
+        script: |
+          set -euo pipefail
+          : "${IOS_FIREBASE_CONFIG_BASE64:?Add IOS_FIREBASE_CONFIG_BASE64 to the firebase_credentials group}"
+
+          FIREBASE_PLIST="$CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist"
+          printf '%s' "$IOS_FIREBASE_CONFIG_BASE64" | base64 --decode > "$FIREBASE_PLIST"
+          plutil -lint "$FIREBASE_PLIST"
+
+          plist_value() {
+            /usr/libexec/PlistBuddy -c "Print :$1" "$FIREBASE_PLIST"
+          }
+
+          PLIST_BUNDLE_ID="$(plist_value BUNDLE_ID)"
+          if [ "$PLIST_BUNDLE_ID" != "$BUNDLE_ID" ]; then
+            echo "Firebase plist bundle ID does not match the release bundle ID." >&2
+            exit 1
+          fi
+
+          {
+            echo "BOOKLY_IOS_FIREBASE_API_KEY=$(plist_value API_KEY)"
+            echo "BOOKLY_IOS_FIREBASE_APP_ID=$(plist_value GOOGLE_APP_ID)"
+            echo "BOOKLY_IOS_FIREBASE_MESSAGING_SENDER_ID=$(plist_value GCM_SENDER_ID)"
+            echo "BOOKLY_IOS_FIREBASE_PROJECT_ID=$(plist_value PROJECT_ID)"
+            echo "BOOKLY_IOS_FIREBASE_STORAGE_BUCKET=$(plist_value STORAGE_BUCKET)"
+            echo "BOOKLY_IOS_FIREBASE_BUNDLE_ID=$PLIST_BUNDLE_ID"
+          } >> "$CM_ENV"
+
+          if [ "$(plist_value PROJECT_ID)" != "bookly-1f5f7" ]; then
+            echo "Firebase plist is not from the expected bookly-1f5f7 project." >&2
+            exit 1
+          fi
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods dependencies
+        script: cd ios && pod install
+      - name: Configure App Store distribution signing
+        script: |
+          set -euo pipefail
+          : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Missing App Store Connect key identifier}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Missing App Store Connect issuer ID}"
+          : "${APP_STORE_CONNECT_PRIVATE_KEY:?Missing App Store Connect private key}"
+
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Analyze iOS release surface
+        script: |
+          flutter analyze --no-pub \
+            lib/core/config/release_scope.dart \
+            lib/core/firebase/firebase_options.dart \
+            lib/features/auth/presentation/screens/login_screen.dart \
+            lib/features/settings/presentation/screens/settings_screen.dart \
+            lib/features/booking/presentation/screens/booking_screen.dart
+      - name: Run iOS release baseline tests
+        script: |
+          flutter test \
+            test/unit/ios_release_baseline_test.dart \
+            test/features/auth/auth_form_screen_test.dart
+      - name: Build signed IPA
+        script: |
+          flutter build ipa --release \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=BOOKLY_IOS_FIREBASE_API_KEY="$BOOKLY_IOS_FIREBASE_API_KEY" \
+            --dart-define=BOOKLY_IOS_FIREBASE_APP_ID="$BOOKLY_IOS_FIREBASE_APP_ID" \
+            --dart-define=BOOKLY_IOS_FIREBASE_MESSAGING_SENDER_ID="$BOOKLY_IOS_FIREBASE_MESSAGING_SENDER_ID" \
+            --dart-define=BOOKLY_IOS_FIREBASE_PROJECT_ID="$BOOKLY_IOS_FIREBASE_PROJECT_ID" \
+            --dart-define=BOOKLY_IOS_FIREBASE_STORAGE_BUCKET="$BOOKLY_IOS_FIREBASE_STORAGE_BUCKET" \
+            --dart-define=BOOKLY_IOS_FIREBASE_BUNDLE_ID="$BOOKLY_IOS_FIREBASE_BUNDLE_ID" \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/*.xcarchive
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false

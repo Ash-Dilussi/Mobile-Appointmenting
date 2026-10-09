@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties. The real file and keystore are
+# ignored by git and must be held in the owner-approved secure location.
+storeFile=../secure/bookly-upload.jks
+storePassword=REPLACE_WITH_SECRET
+keyAlias=bookly-upload
+keyPassword=REPLACE_WITH_SECRET

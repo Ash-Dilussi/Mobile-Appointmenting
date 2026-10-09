@@ -31,7 +31,8 @@ class _HourlyGridState extends ConsumerState<HourlyGrid> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _nowTimer = Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
+    _nowTimer =
+        Timer.periodic(const Duration(minutes: 1), (_) => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToNow());
   }
 
@@ -50,9 +51,8 @@ class _HourlyGridState extends ConsumerState<HourlyGrid> {
   @override
   Widget build(BuildContext context) {
     final lanes = assignLanes(widget.blocks);
-    final maxLane = lanes.isEmpty
-        ? 0
-        : lanes.values.reduce((a, b) => a > b ? a : b) + 1;
+    final maxLane =
+        lanes.isEmpty ? 0 : lanes.values.reduce((a, b) => a > b ? a : b) + 1;
 
     return Row(
       children: [
@@ -69,7 +69,7 @@ class _HourlyGridState extends ConsumerState<HourlyGrid> {
                     padding: const EdgeInsets.only(right: 8),
                     child: Text(
                       DateFormat('ha').format(DateTime(2024, 1, 1, hour)),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.secondary,
                         fontWeight: FontWeight.w500,
@@ -128,12 +128,15 @@ class _HourlyGridState extends ConsumerState<HourlyGrid> {
                   // Event cards
                   ...widget.blocks.map((block) {
                     final lane = lanes[block] ?? 0;
-                    final availableWidth =
-                        MediaQuery.of(context).size.width - kTimeLabelWidth - 32;
+                    final availableWidth = MediaQuery.of(context).size.width -
+                        kTimeLabelWidth -
+                        32;
                     final laneWidth = maxLane > 0
                         ? (availableWidth / maxLane) - 4.0
                         : availableWidth;
-                    final left = lane * (availableWidth / maxLane.clamp(1, maxLane)) + 2.0;
+                    final left =
+                        lane * (availableWidth / maxLane.clamp(1, maxLane)) +
+                            2.0;
 
                     return Positioned(
                       top: topOffsetFor(block.start),

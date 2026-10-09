@@ -1,12 +1,13 @@
 #!/usr/bin/env dart
+
 /// End of Day - Mark all ongoing appointments as done
 /// Usage: dart run scripts/end_day.dart
 
 import 'package:hive/hive.dart';
 
 Future<void> main() async {
-  final homeDir = r'd:\Projects\Vibe test\Mobile Appointmenting';
-  final dbPath = '$homeDir\.dart_tool\hive';
+  const homeDir = r'd:\Projects\Vibe test\Mobile Appointmenting';
+  final dbPath = '${homeDir}.dart_toolhive';
 
   Hive.init(dbPath);
   final box = await Hive.openBox('Appointment');

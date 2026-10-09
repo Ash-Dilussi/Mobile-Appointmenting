@@ -43,5 +43,14 @@ class CallLog extends HiveObject {
   @HiveField(12)
   String? handledByUserId;
 
+  /// Identifies how this row entered Bookly without rewriting historical data.
+  ///
+  /// Rows written before this field existed deserialize as [originLegacy].
+  @HiveField(13, defaultValue: originLegacy)
+  String origin = originLegacy;
+
+  static const String originLegacy = 'legacy';
+  static const String originAppInitiated = 'app_initiated';
+
   CallLog();
 }

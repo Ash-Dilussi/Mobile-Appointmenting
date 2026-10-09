@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/leave_request.dart';
+import '../../../../core/auth/officer_provisioning_service.dart';
 import '../../../../core/providers/hive_service_provider.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
 
 class LeaveRequestsScreen extends ConsumerWidget {
@@ -13,20 +14,22 @@ class LeaveRequestsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
     final hiveService = ref.watch(hiveServiceProvider);
 
     if (session?.institutionId == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Leave Requests')),
-        body: const Center(child: Text('No company found')),
+        body: const Center(child: Text('No business found')),
       );
     }
 
-    final pendingRequests = hiveService.getPendingLeaveRequests(session!.institutionId!);
+    final pendingRequests =
+        hiveService.getPendingLeaveRequests(session!.institutionId!);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Leave Requests'),
         centerTitle: true,
@@ -51,7 +54,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
                     Icon(
                       Icons.check_circle_outline,
                       size: 64,
-                      color: AppColors.secondary,
+                      color: colors.onSurfaceVariant,
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     Text(
@@ -62,7 +65,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
                     Text(
                       'All leave requests have been processed.',
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -85,13 +88,13 @@ class LeaveRequestsScreen extends ConsumerWidget {
                         Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: AppColors.primaryContainer,
+                              backgroundColor: colors.primaryContainer,
                               child: Text(
                                 request.userName.isNotEmpty
                                     ? request.userName[0].toUpperCase()
                                     : '?',
-                                style: const TextStyle(
-                                  color: AppColors.onPrimaryContainer,
+                                style: TextStyle(
+                                  color: colors.onPrimaryContainer,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -110,7 +113,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
                                   Text(
                                     request.userEmail,
                                     style: AppTypography.bodySmall.copyWith(
-                                      color: AppColors.secondary,
+                                      color: colors.onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -124,13 +127,13 @@ class LeaveRequestsScreen extends ConsumerWidget {
                             Icon(
                               Icons.access_time,
                               size: 16,
-                              color: AppColors.secondary,
+                              color: colors.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               'Requested ${_formatDate(request.requestedAt)}',
                               style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.secondary,
+                                color: colors.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -140,10 +143,11 @@ class LeaveRequestsScreen extends ConsumerWidget {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => _rejectRequest(context, ref, request),
+                                onPressed: () =>
+                                    _rejectRequest(context, ref, request),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.error,
-                                  side: const BorderSide(color: AppColors.error),
+                                  foregroundColor: colors.error,
+                                  side: BorderSide(color: colors.error),
                                 ),
                                 child: const Text('Reject'),
                               ),
@@ -151,7 +155,8 @@ class LeaveRequestsScreen extends ConsumerWidget {
                             const SizedBox(width: AppSpacing.md),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () => _approveRequest(context, ref, request),
+                                onPressed: () =>
+                                    _approveRequest(context, ref, request),
                                 child: const Text('Approve'),
                               ),
                             ),
@@ -191,8 +196,8 @@ class LeaveRequestsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Approve Leave Request?'),
         content: Text(
-          'This will remove ${request.userName} from your company. '
-          'They will no longer have access to this company\'s data.',
+          'This will remove ${request.userName} from your business. '
+          'They will no longer have access to this business\'s data.',
         ),
         actions: [
           TextButton(
@@ -212,7 +217,33 @@ class LeaveRequestsScreen extends ConsumerWidget {
     final hiveService = ref.read(hiveServiceProvider);
     final session = ref.read(authSessionProvider);
 
-    // Update leave request status
+    try {
+      // Membership is revoked remotely first. Only after the trusted server
+      // transaction confirms do we invalidate this device's local cache.
+      await ref
+          .read(officerProvisioningServiceProvider)
+          .removeOfficer(officerUid: request.userId);
+    } on OfficerProvisioningException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'We could not remove this staff member. No local data was changed.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Update the local operational request only after server confirmation.
     request.status = 'approved';
     request.processedAt = DateTime.now();
     request.processedBy = session?.userId;
@@ -228,7 +259,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${request.userName} has left the company')),
+        SnackBar(content: Text('${request.userName} has left the business')),
       );
     }
   }
@@ -241,7 +272,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
         title: const Text('Reject Leave Request?'),
         content: Text(
           'This will reject ${request.userName}\'s request to leave. '
-          'They will remain a member of your company.',
+          'They will remain a member of your business.',
         ),
         actions: [
           TextButton(
@@ -276,7 +307,7 @@ class LeaveRequestsScreen extends ConsumerWidget {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Leave request rejected')),
+        const SnackBar(content: Text('Leave request rejected')),
       );
     }
   }

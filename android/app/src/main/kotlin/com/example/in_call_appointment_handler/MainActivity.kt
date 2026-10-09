@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.CallLog as AndroidCallLog
 import android.telephony.TelephonyManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -41,6 +42,7 @@ class MainActivity : FlutterActivity() {
 
     // ── Call receiver ───────────────────────────────────────────────────────
     private var callReceiver: BroadcastReceiver? = null
+    private var lastEmittedCallDate: Long = 0L
 
     // ── Recording state ─────────────────────────────────────────────────────
     private var mediaRecorder:         MediaRecorder? = null
@@ -94,6 +96,7 @@ class MainActivity : FlutterActivity() {
         ).also { ch ->
             ch.setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "isFeatureEnabled" -> result.success(BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED)
                     "checkPermission"  -> result.success(hasRecordingPermission())
                     // FIX #2: never stub permission — delegate to Flutter permission_handler
                     "requestPermission" -> result.success(hasRecordingPermission())
@@ -129,13 +132,15 @@ class MainActivity : FlutterActivity() {
         checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
 
     private fun hasRecordingPermission(): Boolean =
-        checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     // ════════════════════════════════════════════════════════════════════════
     // Recording
     // ════════════════════════════════════════════════════════════════════════
 
     private fun startRecording(): String? {
+        if (!BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED) return null
         if (isRecording) return currentRecordingPath
         if (!hasRecordingPermission()) {
             emitRecordEvent("error", mapOf("message" to "RECORD_AUDIO permission not granted"))
@@ -234,11 +239,22 @@ class MainActivity : FlutterActivity() {
                     }
                     TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                         emitCallEvent("offhook", number)
-                        if (!isRecording) startRecording()
+                        if (BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED && !isRecording) {
+                            startRecording()
+                        }
                     }
                     TelephonyManager.EXTRA_STATE_IDLE -> {
                         emitCallEvent("idle", "")
-                        if (isRecording) stopRecording()
+                        if (BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED && isRecording) {
+                            stopRecording()
+                        }
+                        // Android's call-log provider is updated just after the
+                        // phone-state idle broadcast. Read the authoritative
+                        // completed row instead of reconstructing direction,
+                        // number, and duration from partial state callbacks.
+                        if (BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED) {
+                            mainHandler.postDelayed({ emitLatestCompletedCall() }, 750L)
+                        }
                     }
                 }
             }
@@ -269,6 +285,72 @@ class MainActivity : FlutterActivity() {
     private fun emitCallEvent(type: String, number: String) {
         mainHandler.post {
             eventSink?.success(mapOf("type" to type, "number" to number))
+        }
+    }
+
+    private fun emitLatestCompletedCall() {
+        if (!BuildConfig.DORMANT_CALL_INTEGRATION_ENABLED) return
+        if (checkSelfPermission(Manifest.permission.READ_CALL_LOG) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+            val projection = arrayOf(
+                AndroidCallLog.Calls.NUMBER,
+                AndroidCallLog.Calls.TYPE,
+                AndroidCallLog.Calls.DATE,
+                AndroidCallLog.Calls.DURATION,
+            )
+
+            contentResolver.query(
+                AndroidCallLog.Calls.CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${AndroidCallLog.Calls.DATE} DESC",
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return
+
+                val date = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(AndroidCallLog.Calls.DATE),
+                )
+                if (date <= lastEmittedCallDate) return
+
+                val callType = cursor.getInt(
+                    cursor.getColumnIndexOrThrow(AndroidCallLog.Calls.TYPE),
+                )
+                val direction = when (callType) {
+                    AndroidCallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                    AndroidCallLog.Calls.MISSED_TYPE -> "missed"
+                    else -> "incoming"
+                }
+                val number = cursor.getString(
+                    cursor.getColumnIndexOrThrow(AndroidCallLog.Calls.NUMBER),
+                ) ?: ""
+                val duration = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(AndroidCallLog.Calls.DURATION),
+                ).coerceAtLeast(0L)
+
+                lastEmittedCallDate = date
+                eventSink?.success(
+                    mapOf(
+                        "type" to "completed_call",
+                        "number" to number,
+                        "timestampMillis" to date,
+                        "durationSeconds" to duration,
+                        "direction" to direction,
+                        "isMissed" to (callType == AndroidCallLog.Calls.MISSED_TYPE),
+                    ),
+                )
+            }
+        } catch (_: SecurityException) {
+            // Permission can be revoked while the app is running. The Flutter
+            // layer owns user-facing permission and recovery UX.
+        } catch (_: Exception) {
+            // A device/OEM may not expose the provider consistently. Keep the
+            // state stream alive and wait for the next completed call.
         }
     }
 

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../home/presentation/providers/home_provider.dart';
+import '../widgets/appointment_note_card.dart';
 
 class BookingConfirmationScreen extends ConsumerWidget {
   final int appointmentId;
@@ -18,6 +18,7 @@ class BookingConfirmationScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final db = ref.watch(homeHiveProvider);
     final appointment = db.getAppointmentById(appointmentId);
 
@@ -29,26 +30,25 @@ class BookingConfirmationScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(),
+              const SizedBox(height: AppSpacing.xxl),
 
               // Success Icon
               Container(
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.1),
+                  color: colors.tertiaryContainer,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.check_circle,
-                  color: AppColors.success,
+                  color: colors.onTertiaryContainer,
                   size: 60,
                 ),
               ),
@@ -67,7 +67,7 @@ class BookingConfirmationScreen extends ConsumerWidget {
               Text(
                 'Your appointment has been successfully scheduled.',
                 style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.secondary,
+                  color: colors.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -79,7 +79,7 @@ class BookingConfirmationScreen extends ConsumerWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLowest,
+                  color: colors.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
                 ),
                 child: Column(
@@ -90,34 +90,37 @@ class BookingConfirmationScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                            color: colors.primaryContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.calendar_today,
-                            color: AppColors.primary,
+                            color: colors.onPrimaryContainer,
                             size: 20,
                           ),
                         ),
                         const SizedBox(width: AppSpacing.md),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Date & Time',
-                              style: AppTypography.labelSmall,
-                            ),
-                            Text(
-                              '${DateFormat('EEEE, MMMM d').format(appointment.startTime)} at ${DateFormat('h:mm a').format(appointment.startTime)}',
-                              style: AppTypography.bodyLarge,
-                            ),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Date & Time',
+                                style: AppTypography.labelSmall,
+                              ),
+                              Text(
+                                '${DateFormat('EEEE, MMMM d').format(appointment.startTime)} at ${DateFormat('h:mm a').format(appointment.startTime)}',
+                                style: AppTypography.bodyLarge,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
 
                     const SizedBox(height: AppSpacing.lg),
-                    Divider(color: AppColors.outline.withValues(alpha: 0.1)),
+                    Divider(color: colors.outlineVariant),
                     const SizedBox(height: AppSpacing.lg),
 
                     // Duration
@@ -126,12 +129,13 @@ class BookingConfirmationScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                            color: colors.primaryContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.schedule,
-                            color: AppColors.primary,
+                            color: colors.onPrimaryContainer,
                             size: 20,
                           ),
                         ),
@@ -153,7 +157,7 @@ class BookingConfirmationScreen extends ConsumerWidget {
                     ),
 
                     const SizedBox(height: AppSpacing.lg),
-                    Divider(color: AppColors.outline.withValues(alpha: 0.1)),
+                    Divider(color: colors.outlineVariant),
                     const SizedBox(height: AppSpacing.lg),
 
                     // Status
@@ -162,12 +166,13 @@ class BookingConfirmationScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                            color: colors.secondaryContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.pending,
-                            color: AppColors.warning,
+                            color: colors.onSecondaryContainer,
                             size: 20,
                           ),
                         ),
@@ -182,7 +187,7 @@ class BookingConfirmationScreen extends ConsumerWidget {
                             Text(
                               appointment.status.toUpperCase(),
                               style: AppTypography.bodyLarge.copyWith(
-                                color: AppColors.warning,
+                                color: colors.onSurface,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -194,7 +199,46 @@ class BookingConfirmationScreen extends ConsumerWidget {
                 ),
               ),
 
-              const Spacer(),
+              if (appointment.notes.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xxl),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    children: [
+                      Text('Notes', style: AppTypography.titleMedium),
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.primaryContainer,
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusFull),
+                        ),
+                        child: Text(
+                          '${appointment.notes.length}',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: colors.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                for (var index = 0;
+                    index < appointment.notes.length;
+                    index++) ...[
+                  AppointmentNoteCard(note: appointment.notes[index]),
+                  if (index < appointment.notes.length - 1)
+                    const SizedBox(height: AppSpacing.sm),
+                ],
+              ],
+
+              const SizedBox(height: AppSpacing.xxxl),
 
               // Actions
               Row(

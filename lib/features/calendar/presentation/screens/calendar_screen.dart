@@ -4,23 +4,31 @@ import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../core/database/hive_service.dart';
+import '../../../../shared/widgets/appointment_tile.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../../../home/presentation/providers/home_provider.dart';
 
 // Provider that maps each day to a busy level (0.0-1.0) based on appointment count
 final calendarBusyDaysProvider = StreamProvider<Map<DateTime, double>>((ref) {
   final db = ref.watch(homeHiveProvider);
-  return db.watchAllAppointments().map((appointments) {
+  final institutionId = ref.watch(authSessionProvider)?.institutionId;
+  final appointments = institutionId == null
+      ? Stream.value(const <Appointment>[])
+      : db.watchAppointmentsForInstitution(institutionId);
+  return appointments.map((appointments) {
     final Map<DateTime, double> busyLevels = {};
     for (final apt in appointments) {
-      final day = DateTime(apt.startTime.year, apt.startTime.month, apt.startTime.day);
+      final day =
+          DateTime(apt.startTime.year, apt.startTime.month, apt.startTime.day);
       busyLevels[day] = (busyLevels[day] ?? 0) + 1;
     }
     // Normalize to 0.0-1.0 scale
-    return busyLevels.map((day, count) => MapEntry(day, _getBusyLevel(count.toInt())));
+    return busyLevels
+        .map((day, count) => MapEntry(day, _getBusyLevel(count.toInt())));
   });
 });
 
@@ -31,12 +39,19 @@ double _getBusyLevel(int appointmentCount) {
   return 0.9;
 }
 
-Color _getBusyColor(double level) {
-  if (level == 0) return AppColors.surfaceContainerHigh;
-  if (level < 0.4) return AppColors.primaryFixedDim;
-  if (level < 0.7) return AppColors.primaryContainer;
-  return AppColors.primary;
+Color _getBusyColor(double level, ColorScheme colors) {
+  if (level == 0) return colors.surfaceContainerHigh;
+  if (level < 0.4) return colors.primaryContainer.withValues(alpha: 0.55);
+  if (level < 0.7) return colors.primaryContainer;
+  return colors.primary;
 }
+
+final calendarAppointmentServicesProvider =
+    StreamProvider.family<List<AppointmentService>, int?>((ref, appointmentId) {
+  if (appointmentId == null) return Stream.value(const <AppointmentService>[]);
+  final db = ref.watch(homeHiveProvider);
+  return db.watchAppointmentServicesForAppointment(appointmentId);
+});
 
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -59,10 +74,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(homeHiveProvider);
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
     final busyDaysAsync = ref.watch(calendarBusyDaysProvider);
+    final colors = Theme.of(context).colorScheme;
+    ref.watch(servicesProvider);
+    ref.watch(serviceStationsProvider);
+    ref.watch(recentCustomersProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Calendar'),
         centerTitle: true,
@@ -76,7 +96,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 margin: const EdgeInsets.all(AppSpacing.md),
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLowest,
+                  color: colors.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
                 ),
                 child: busyDaysAsync.when(
@@ -102,7 +122,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     },
                     calendarBuilders: CalendarBuilders(
                       markerBuilder: (context, date, events) {
-                        final dayKey = DateTime(date.year, date.month, date.day);
+                        final dayKey =
+                            DateTime(date.year, date.month, date.day);
                         final level = busyDays[dayKey] ?? 0.0;
                         if (level == 0) return null;
                         return Positioned(
@@ -111,7 +132,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                             width: 6,
                             height: 6,
                             decoration: BoxDecoration(
-                              color: _getBusyColor(level),
+                              color: _getBusyColor(level, colors),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -120,30 +141,32 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     ),
                     calendarStyle: CalendarStyle(
                       todayDecoration: BoxDecoration(
-                        color: AppColors.primaryContainer,
+                        color: colors.primaryContainer,
                         shape: BoxShape.circle,
                       ),
                       todayTextStyle: AppTypography.bodyLarge.copyWith(
-                        color: AppColors.onPrimaryContainer,
+                        color: colors.onPrimaryContainer,
                         fontWeight: FontWeight.w600,
                       ),
-                      selectedDecoration: const BoxDecoration(
-                        color: AppColors.primary,
+                      selectedDecoration: BoxDecoration(
+                        color: colors.primary,
                         shape: BoxShape.circle,
                       ),
                       selectedTextStyle: AppTypography.bodyLarge.copyWith(
-                        color: AppColors.onPrimary,
+                        color: colors.onPrimary,
                         fontWeight: FontWeight.w600,
                       ),
-                      defaultTextStyle: AppTypography.bodyMedium,
+                      defaultTextStyle: AppTypography.bodyMedium.copyWith(
+                        color: colors.onSurface,
+                      ),
                       weekendTextStyle: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                       ),
                       outsideTextStyle: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.outline,
+                        color: colors.outline,
                       ),
-                      markerDecoration: const BoxDecoration(
-                        color: AppColors.primaryContainer,
+                      markerDecoration: BoxDecoration(
+                        color: colors.primaryContainer,
                         shape: BoxShape.circle,
                       ),
                       markersMaxCount: 3,
@@ -154,32 +177,36 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       formatButtonVisible: true,
                       titleCentered: true,
                       formatButtonDecoration: BoxDecoration(
-                        color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        color: colors.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
                       ),
                       formatButtonTextStyle: AppTypography.labelMedium.copyWith(
-                        color: AppColors.primary,
+                        color: colors.primary,
                       ),
-                      titleTextStyle: AppTypography.titleLarge,
-                      leftChevronIcon: const Icon(
+                      titleTextStyle: AppTypography.titleLarge.copyWith(
+                        color: colors.onSurface,
+                      ),
+                      leftChevronIcon: Icon(
                         Icons.chevron_left,
-                        color: AppColors.onSurface,
+                        color: colors.onSurface,
                       ),
-                      rightChevronIcon: const Icon(
+                      rightChevronIcon: Icon(
                         Icons.chevron_right,
-                        color: AppColors.onSurface,
+                        color: colors.onSurface,
                       ),
                     ),
                     daysOfWeekStyle: DaysOfWeekStyle(
                       weekdayStyle: AppTypography.labelMedium.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                       ),
                       weekendStyle: AppTypography.labelMedium.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                   ),
-                  loading: () => const Center(child: CircularProgressIndicator()),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
                   error: (err, stack) => Center(child: Text('Error: $err')),
                 ),
               ),
@@ -194,7 +221,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       _selectedDay != null
                           ? DateFormat('EEEE, MMM d').format(_selectedDay!)
                           : 'Select a day',
-                      style: AppTypography.titleMedium,
+                      style: AppTypography.titleMedium.copyWith(
+                        color: colors.onSurface,
+                      ),
                     ),
                     TextButton.icon(
                       onPressed: () {
@@ -204,7 +233,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         });
                       },
                       icon: const Icon(Icons.today, size: 18),
-                      label: const Text('Today'),
+                      label: const Text('view Today'),
                     ),
                   ],
                 ),
@@ -215,7 +244,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               // Appointments List
               if (_selectedDay != null)
                 StreamBuilder<List<Appointment>>(
-                  stream: db.watchAppointmentsForDate(_selectedDay!),
+                  stream: institutionId == null
+                      ? Stream.value(const <Appointment>[])
+                      : db.watchAppointmentsForDateForInstitution(
+                          _selectedDay!,
+                          institutionId,
+                        ),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -231,13 +265,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                             Icon(
                               Icons.event_available_outlined,
                               size: 48,
-                              color: AppColors.secondary.withValues(alpha: 0.5),
+                              color: colors.onSurfaceVariant.withValues(
+                                alpha: 0.5,
+                              ),
                             ),
                             const SizedBox(height: AppSpacing.md),
                             Text(
                               'No appointments for this day',
                               style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.secondary,
+                                color: colors.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -245,27 +281,54 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       );
                     }
 
-                    return ListView.builder(
+                    return ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.lg,
                       ),
                       itemCount: appointments.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: AppSpacing.md),
                       itemBuilder: (context, index) {
-                        return InkWell(
-                          onTap: appointments[index].id != null
+                        final appointment = appointments[index];
+                        final lineItems = ref
+                                .watch(calendarAppointmentServicesProvider(
+                                  appointment.id,
+                                ))
+                                .value ??
+                            const <AppointmentService>[];
+                        final services = _resolveServices(
+                          db,
+                          appointment,
+                          lineItems,
+                        );
+                        final customer = appointment.customerId == null
+                            ? null
+                            : db.getCustomerById(appointment.customerId!);
+                        final station = appointment.stationId == null
+                            ? null
+                            : db.getServiceStationById(appointment.stationId!);
+
+                        return AppointmentTile(
+                          appointment: appointment,
+                          customerName: customer?.name ?? '',
+                          services: services,
+                          totalDurationMinutes: _resolveTotalDuration(
+                            appointment,
+                            services,
+                          ),
+                          locationName: station?.name ?? '',
+                          onTap: appointment.id != null
                               ? () {
-                                  context.goNamed(
+                                  context.pushNamed(
                                     'appointment-detail',
-                                    pathParameters: {'id': appointments[index].id.toString()},
+                                    pathParameters: {
+                                      'id': appointment.id.toString()
+                                    },
                                   );
                                 }
                               : null,
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                          child: _CalendarAppointmentCard(
-                            appointment: appointments[index],
-                          ),
                         );
                       },
                     );
@@ -294,10 +357,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 queryParameters: dateStr != null ? {'date': dateStr} : {},
               );
             },
-            backgroundColor: AppColors.primaryContainer,
-            child: const Icon(Icons.schedule_rounded, color: AppColors.onPrimaryContainer),
+            backgroundColor: colors.primaryContainer,
+            child: Icon(
+              Icons.schedule_rounded,
+              color: colors.onPrimaryContainer,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           // Primary FAB - New Booking
           FloatingActionButton(
             heroTag: 'new_booking',
@@ -318,81 +384,51 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 }
 
-class _CalendarAppointmentCard extends StatelessWidget {
-  final Appointment appointment;
-
-  const _CalendarAppointmentCard({required this.appointment});
-
-  @override
-  Widget build(BuildContext context) {
-    final timeFormat = DateFormat('h:mm a');
-
-    Color statusColor;
-    switch (appointment.status) {
-      case 'confirmed':
-        statusColor = AppColors.success;
-        break;
-      case 'ongoing':
-        statusColor = AppColors.ongoing;
-        break;
-      case 'done':
-        statusColor = AppColors.secondary;
-        break;
-      default:
-        statusColor = AppColors.warning;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 56,
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                timeFormat.format(appointment.startTime),
-                style: AppTypography.titleMedium,
-              ),
-              Text(
-                '${timeFormat.format(appointment.startTime)} - ${timeFormat.format(appointment.endTime)}',
-                style: AppTypography.bodySmall,
-              ),
-            ],
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            ),
-            child: Text(
-              appointment.status.toUpperCase(),
-              style: AppTypography.labelSmall.copyWith(
-                color: statusColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+List<AppointmentTileService> _resolveServices(
+  HiveService db,
+  Appointment appointment,
+  List<AppointmentService> lineItems,
+) {
+  if (lineItems.isNotEmpty) {
+    return lineItems.map((lineItem) {
+      final service = lineItem.serviceId == null
+          ? null
+          : db.getServiceById(lineItem.serviceId!);
+      return AppointmentTileService(
+        name: service?.title ?? 'Unknown',
+        durationMinutes:
+            lineItem.durationOverride ?? service?.defaultDurationMinutes ?? 0,
+        colorValue: service?.colorValue,
+      );
+    }).toList(growable: false);
   }
+
+  final service = appointment.serviceId == null
+      ? null
+      : db.getServiceById(appointment.serviceId!);
+  if (service == null) return const <AppointmentTileService>[];
+
+  return <AppointmentTileService>[
+    AppointmentTileService(
+      name: service.title,
+      durationMinutes:
+          appointment.endTime.difference(appointment.startTime).inMinutes,
+      colorValue: service.colorValue,
+    ),
+  ];
+}
+
+int _resolveTotalDuration(
+  Appointment appointment,
+  List<AppointmentTileService> services,
+) {
+  final linkedDuration = services.fold<int>(
+    0,
+    (total, service) => total + service.durationMinutes,
+  );
+  if (linkedDuration > 0) return linkedDuration;
+
+  final appointmentDuration =
+      appointment.endTime.difference(appointment.startTime).inMinutes;
+  return appointmentDuration < 0 ? 0 : appointmentDuration;
 }

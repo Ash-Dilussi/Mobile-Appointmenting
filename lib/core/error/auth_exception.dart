@@ -16,8 +16,7 @@ class AuthException implements Exception {
   factory AuthException.noFirebaseUser() =>
       const AuthException('no_firebase_user');
 
-  factory AuthException.tokenRevoked() =>
-      const AuthException('token_revoked');
+  factory AuthException.tokenRevoked() => const AuthException('token_revoked');
 
   @override
   String toString() => 'AuthException(code: $code, message: $message)';

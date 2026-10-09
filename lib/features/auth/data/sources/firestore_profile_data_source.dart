@@ -27,27 +27,15 @@ class FirestoreProfileDataSource {
         .set(model.toMap(), SetOptions(merge: true));
   }
 
-  Future<void> linkToInstitution({
-    required String uid,
-    required String institutionId,
-    required String role,
-  }) async {
-    await _firestore
-        .collection(FirestorePaths.users)
-        .doc(uid)
-        .update({
-      'institutionId': institutionId,
-      'role': role,
+  Future<void> acknowledgePasswordChangePrompt(String uid) {
+    return _firestore.collection(FirestorePaths.users).doc(uid).update({
+      'shouldPromptPasswordChange': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
   Stream<FirestoreUserModel?> watchProfile(String uid) {
-    return _firestore
-        .collection(FirestorePaths.users)
-        .doc(uid)
-        .snapshots()
-        .map((snap) =>
-            snap.exists ? FirestoreUserModel.fromDocument(snap) : null);
+    return _firestore.collection(FirestorePaths.users).doc(uid).snapshots().map(
+        (snap) => snap.exists ? FirestoreUserModel.fromDocument(snap) : null);
   }
 }

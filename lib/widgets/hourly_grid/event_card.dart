@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/calendar_block.dart';
+import '../../core/theme/service_color_palette.dart';
 
 class EventCard extends StatelessWidget {
   const EventCard({super.key, required this.block});
@@ -9,6 +10,9 @@ class EventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLocal = block.source == EventSource.local;
+    final foreground = ServiceColorPalette.readableForeground(
+      block.displayColor,
+    );
 
     return Semantics(
       label: '${isLocal ? "Appointment" : "Google Event"}: '
@@ -36,14 +40,14 @@ class EventCard extends StatelessWidget {
                 Icon(
                   isLocal ? Icons.event_rounded : Icons.calendar_today_rounded,
                   size: 14,
-                  color: Colors.white,
+                  color: foreground,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     block.title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: foreground,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -58,7 +62,7 @@ class EventCard extends StatelessWidget {
               Text(
                 block.subtitle!,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: foreground.withValues(alpha: 0.8),
                   fontSize: 11,
                 ),
                 maxLines: 1,
@@ -69,7 +73,7 @@ class EventCard extends StatelessWidget {
             Text(
               '${_formatTime(block.start)} - ${_formatTime(block.end)}',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: foreground.withValues(alpha: 0.75),
                 fontSize: 11,
               ),
             ),

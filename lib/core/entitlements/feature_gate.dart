@@ -220,7 +220,7 @@ class _UpgradeSheet extends StatelessWidget {
                     color: AppColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.lock_outline_rounded,
+                  child: const Icon(Icons.lock_outline_rounded,
                       size: 32, color: AppColors.primary),
                 ),
               ),
@@ -236,7 +236,7 @@ class _UpgradeSheet extends StatelessWidget {
               Text(
                 feature.upgradeReason,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.secondary, height: 1.5),
+                style: const TextStyle(color: AppColors.secondary, height: 1.5),
               ),
               const SizedBox(height: AppSpacing.xxl),
               FilledButton(

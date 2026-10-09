@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_form_group.dart';
+import '../../../../shared/widgets/app_icon_button.dart';
 import '../providers/auth_provider.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
@@ -13,7 +15,8 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key, this.resetEmail});
 
   @override
-  ConsumerState<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+  ConsumerState<ResetPasswordScreen> createState() =>
+      _ResetPasswordScreenState();
 }
 
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
@@ -39,7 +42,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       final email = widget.resetEmail ?? '';
       final newPassword = _passwordController.text;
 
-      final success = await ref.read(authStateProvider.notifier).resetPassword(email, newPassword);
+      final success = await ref
+          .read(authStateProvider.notifier)
+          .resetPassword(email, newPassword);
 
       setState(() {
         _isLoading = false;
@@ -48,9 +53,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
       if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to reset password. Please try again.'),
-            backgroundColor: AppColors.error,
+          SnackBar(
+            content: const Text('Failed to reset password. Please try again.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -59,13 +64,16 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: colors.surface.withValues(alpha: 0),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.secondary),
+        leading: AppIconButton(
+          tooltip: 'Back to sign in',
+          color: colors.onSurfaceVariant,
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.goNamed('login'),
         ),
       ),
@@ -79,19 +87,19 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               children: [
                 const SizedBox(height: AppSpacing.xxxl),
 
-                // Icon
-                Center(
+                Align(
+                  alignment: Alignment.centerLeft,
                   child: Container(
-                    width: 80,
-                    height: 80,
+                    width: 64,
+                    height: 64,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
+                      color: colors.primaryContainer,
                       borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.lock_reset_rounded,
-                      size: 40,
-                      color: AppColors.onPrimaryContainer,
+                      size: 32,
+                      color: colors.onPrimaryContainer,
                     ),
                   ),
                 ),
@@ -101,10 +109,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 // Title
                 Text(
                   _isSuccess ? 'Password Reset!' : 'Set New Password',
-                  style: AppTypography.displaySmall.copyWith(
-                    color: AppColors.primary,
-                  ),
-                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                  textAlign: TextAlign.left,
                 ),
 
                 const SizedBox(height: AppSpacing.md),
@@ -113,96 +122,105 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   _isSuccess
                       ? 'Your password has been successfully reset.'
                       : 'Enter a new password for your account.',
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.secondary,
-                  ),
-                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                  textAlign: TextAlign.left,
                 ),
 
                 const SizedBox(height: AppSpacing.xxxl),
 
                 if (!_isSuccess) ...[
-                  // New Password field
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      hintText: 'Enter new password',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
+                  AppFormGroup(
+                    children: [
+                      // New Password field
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: 'New Password',
+                          hintText: 'Enter new password',
+                          prefixIcon: const Icon(Icons.lock_outlined),
+                          suffixIcon: AppIconButton(
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a password';
+                          }
+                          if (value.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          return null;
                         },
                       ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
-                  ),
 
-                  const SizedBox(height: AppSpacing.lg),
-
-                  // Confirm Password field
-                  TextFormField(
-                    controller: _confirmPasswordController,
-                    obscureText: _obscureConfirmPassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleResetPassword(),
-                    decoration: InputDecoration(
-                      labelText: 'Confirm Password',
-                      hintText: 'Confirm new password',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirmPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
+                      // Confirm Password field
+                      TextFormField(
+                        controller: _confirmPasswordController,
+                        obscureText: _obscureConfirmPassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _handleResetPassword(),
+                        decoration: InputDecoration(
+                          labelText: 'Confirm Password',
+                          hintText: 'Confirm new password',
+                          prefixIcon: const Icon(Icons.lock_outlined),
+                          suffixIcon: AppIconButton(
+                            tooltip: _obscureConfirmPassword
+                                ? 'Show confirmed password'
+                                : 'Hide confirmed password',
+                            icon: Icon(
+                              _obscureConfirmPassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureConfirmPassword =
+                                    !_obscureConfirmPassword;
+                              });
+                            },
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please confirm your password';
+                          }
+                          if (value != _passwordController.text) {
+                            return 'Passwords do not match';
+                          }
+                          return null;
                         },
                       ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please confirm your password';
-                      }
-                      if (value != _passwordController.text) {
-                        return 'Passwords do not match';
-                      }
-                      return null;
-                    },
+                    ],
                   ),
 
                   const SizedBox(height: AppSpacing.xl),
 
                   // Reset Password button
-                  FilledButton(
+                  AppButton(
                     onPressed: _isLoading ? null : _handleResetPassword,
                     child: _isLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: AppColors.onPrimaryContainer,
+                              color: colors.onPrimaryContainer,
                             ),
                           )
                         : const Text('Reset Password'),
@@ -214,13 +232,13 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                      color: colors.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                     ),
                     child: Text(
                       'Demo: Enter any password (min 6 characters) to reset.',
                       style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -232,13 +250,13 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: Colors.green.shade100,
+                        color: colors.tertiaryContainer,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.check_rounded,
                         size: 32,
-                        color: Colors.green.shade700,
+                        color: colors.onTertiaryContainer,
                       ),
                     ),
                   ),
@@ -246,7 +264,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                   const SizedBox(height: AppSpacing.xxl),
 
                   // Go to Login button
-                  FilledButton(
+                  AppButton(
                     onPressed: () => context.goNamed('login'),
                     child: const Text('Go to Login'),
                   ),

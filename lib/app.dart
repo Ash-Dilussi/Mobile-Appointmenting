@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/app_scroll_behavior.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/theme/style_preset_provider.dart';
 import 'core/router/app_router.dart';
@@ -21,6 +22,7 @@ class App extends ConsumerWidget {
       theme: AppTheme.fromPreset(preset, Brightness.light),
       darkTheme: AppTheme.fromPreset(preset, Brightness.dark),
       themeMode: themeMode,
+      scrollBehavior: const AppScrollBehavior(),
       routerConfig: router,
     );
   }

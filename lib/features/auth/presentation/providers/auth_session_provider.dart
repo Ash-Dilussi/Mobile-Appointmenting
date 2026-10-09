@@ -14,6 +14,7 @@ class AuthSession {
   final String? institutionId;
   final Role? role;
   final bool hasCompletedOnboarding;
+  final bool shouldPromptPasswordChange;
 
   const AuthSession({
     required this.userId,
@@ -22,6 +23,7 @@ class AuthSession {
     this.institutionId,
     this.role,
     this.hasCompletedOnboarding = false,
+    this.shouldPromptPasswordChange = false,
   });
 
   bool get isOwner => role == Role.owner;
@@ -35,6 +37,7 @@ class AuthSession {
     String? institutionId,
     Role? role,
     bool? hasCompletedOnboarding,
+    bool? shouldPromptPasswordChange,
   }) {
     return AuthSession(
       userId: userId ?? this.userId,
@@ -44,6 +47,8 @@ class AuthSession {
       role: role ?? this.role,
       hasCompletedOnboarding:
           hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+      shouldPromptPasswordChange:
+          shouldPromptPasswordChange ?? this.shouldPromptPasswordChange,
     );
   }
 }
@@ -66,7 +71,7 @@ class AuthSessionNotifier extends StateNotifier<AuthSession?> {
         email: user.email,
         name: user.name,
         institutionId: user.institutionId,
-        role: user.role == 'owner' ? Role.owner : Role.officer,
+        role: _roleFromStoredValue(user.role),
         hasCompletedOnboarding: institution != null,
       );
     }
@@ -80,78 +85,10 @@ class AuthSessionNotifier extends StateNotifier<AuthSession?> {
       email: authUser.email,
       name: authUser.displayName,
       institutionId: authUser.institutionId,
-      role: authUser.role == UserRole.owner ? Role.owner : Role.officer,
+      role: _roleFromAuthUser(authUser.role),
       hasCompletedOnboarding: authUser.isLinkedToInstitution,
+      shouldPromptPasswordChange: authUser.shouldPromptPasswordChange,
     );
-  }
-
-  /// Create a new institution (Path A - New Owner)
-  Future<AuthSession> createInstitution({
-    required String userId,
-    required String email,
-    required String name,
-    required String institutionName,
-    required String themePreset,
-  }) async {
-    // Create institution
-    final institutionId = 'inst_${DateTime.now().millisecondsSinceEpoch}';
-    final institution = Institution()
-      ..id = institutionId
-      ..name = institutionName
-      ..themePreset = themePreset
-      ..ownerId = userId;
-
-    await _hiveService.insertInstitution(institution);
-
-    // Create user with owner role
-    final user = User()
-      ..id = userId
-      ..institutionId = institutionId
-      ..email = email
-      ..name = name
-      ..role = 'owner';
-
-    await _hiveService.insertUser(user);
-
-    state = AuthSession(
-      userId: userId,
-      email: email,
-      name: name,
-      institutionId: institutionId,
-      role: Role.owner,
-      hasCompletedOnboarding: true,
-    );
-
-    return state!;
-  }
-
-  /// Join existing institution (Path B - Officer)
-  Future<AuthSession> joinInstitution({
-    required String userId,
-    required String email,
-    required String name,
-    required String institutionId,
-    required String role,
-  }) async {
-    final user = User()
-      ..id = userId
-      ..institutionId = institutionId
-      ..email = email
-      ..name = name
-      ..role = role;
-
-    await _hiveService.insertUser(user);
-
-    state = AuthSession(
-      userId: userId,
-      email: email,
-      name: name,
-      institutionId: institutionId,
-      role: role == 'owner' ? Role.owner : Role.officer,
-      hasCompletedOnboarding: true,
-    );
-
-    return state!;
   }
 
   /// Check if user exists in database
@@ -176,7 +113,24 @@ class AuthSessionNotifier extends StateNotifier<AuthSession?> {
     if (state == null) return;
     state = state!.copyWith(name: displayName);
   }
+
+  void acknowledgePasswordChangePrompt() {
+    if (state == null) return;
+    state = state!.copyWith(shouldPromptPasswordChange: false);
+  }
 }
+
+Role? _roleFromStoredValue(String role) => switch (role) {
+      'owner' => Role.owner,
+      'officer' => Role.officer,
+      _ => null,
+    };
+
+Role? _roleFromAuthUser(UserRole role) => switch (role) {
+      UserRole.owner => Role.owner,
+      UserRole.officer => Role.officer,
+      UserRole.unknown => null,
+    };
 
 /// Provider for multi-tenant auth session
 final authSessionProvider =

@@ -34,6 +34,12 @@ class Service extends HiveObject {
   @HiveField(9)
   String? institutionId;
 
+  /// ARGB value from the curated service color palette.
+  ///
+  /// Nullable so services written by older app versions remain readable.
+  @HiveField(10)
+  int? colorValue;
+
   Service() {
     isActive = true;
   }

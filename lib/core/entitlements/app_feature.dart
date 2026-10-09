@@ -89,7 +89,7 @@ extension AppFeatureLabel on AppFeature {
       case AppFeature.multiUser:
         return 'Invite your whole team and manage permissions.';
       case AppFeature.customTheme:
-        return 'Brand your app with your company colours.';
+        return 'Brand your app with your business colours.';
       case AppFeature.recurringScheduling:
         return 'Set up repeating appointments with a single click.';
       case AppFeature.apiAccess:

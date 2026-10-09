@@ -3,11 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/config/release_scope.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/theme/service_color_palette.dart';
 import '../../../../core/database/collections/collections.dart';
+import '../../../../shared/widgets/app_surface_card.dart';
+import '../../../../shared/widgets/section_header.dart';
+import '../../../../shared/widgets/service_badge.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
+import '../../../auth/presentation/providers/auth_session_provider.dart';
 import '../providers/home_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -17,7 +24,9 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final authState = ref.watch(authStateProvider);
+    final session = ref.watch(authSessionProvider);
     final today = DateTime.now();
 
     // Extract user name from email
@@ -25,7 +34,7 @@ class HomeScreen extends ConsumerWidget {
     final userInitials = userName.isNotEmpty ? userName[0].toUpperCase() : 'R';
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -41,12 +50,13 @@ class HomeScreen extends ConsumerWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        color: colors.primary,
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
                       ),
                       child: Icon(
                         Icons.book_online,
-                        color: Colors.white,
+                        color: colors.onPrimary,
                         size: 28,
                       ),
                     ),
@@ -56,14 +66,14 @@ class HomeScreen extends ConsumerWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: AppColors.primaryContainer,
+                        color: colors.primaryContainer,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: Text(
                           userInitials,
                           style: AppTypography.titleMedium.copyWith(
-                            color: AppColors.onPrimaryContainer,
+                            color: colors.onPrimaryContainer,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -78,33 +88,56 @@ class HomeScreen extends ConsumerWidget {
                           Text(
                             'Hello, $userName',
                             style: AppTypography.headlineMedium.copyWith(
-                              color: AppColors.onSurface,
+                              color: colors.onSurface,
                             ),
                           ),
                           Text(
                             _headerDateFormat.format(today),
                             style: AppTypography.bodyMedium.copyWith(
-                              color: AppColors.secondary,
+                              color: colors.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Notification Bell
-                    IconButton(
-                      onPressed: () {},
-                      icon: Icon(
-                        Icons.notifications_outlined,
-                        color: AppColors.secondary,
+                    if (ReleaseScope.developmentOnlyDestinationsEnabled)
+                      IconButton(
+                        tooltip: 'Notifications',
+                        onPressed: () => context.pushNamed(
+                          'coming-soon',
+                          queryParameters: const {'feature': 'Notifications'},
+                        ),
+                        icon: Icon(
+                          Icons.notifications_outlined,
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
 
+              if (session != null && !session.hasInstitution)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  child: _BusinessSetupBanner(),
+                ),
+
+              if (session?.shouldPromptPasswordChange == true)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.screenPadding,
+                    right: AppSpacing.screenPadding,
+                    top: AppSpacing.md,
+                  ),
+                  child: _PasswordChangePrompt(),
+                ),
+
               // Upcoming Bookings - Stacked cards with glassmorphism
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding),
                 child: _UpcomingBookingsList(),
               ),
 
@@ -112,50 +145,25 @@ class HomeScreen extends ConsumerWidget {
 
               // Availability Summary for Next Two Weeks
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primaryContainer.withValues(alpha: 0.12),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionHeader(
+                      title: 'Availability',
+                      subtitle: 'Next 2 weeks',
+                      actionLabel: 'View Calendar',
+                      onAction: () => context.goNamed('calendar'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppSurfaceCard(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.md,
-                          AppSpacing.md,
-                          AppSpacing.md,
-                          0,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Availability',
-                              style: AppTypography.titleMedium,
-                            ),
-                            Text(
-                              'Next 2 weeks',
-                              style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.secondary.withOpacity(0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _AvailabilityGrid(),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-                  ),
+                      child: _AvailabilityGrid(),
+                    ),
+                  ],
                 ),
               ),
 
@@ -163,48 +171,19 @@ class HomeScreen extends ConsumerWidget {
 
               // Recent Clients Row
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primaryContainer.withValues(alpha: 0.12),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.md,
-                          AppSpacing.md,
-                          AppSpacing.md,
-                          0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Recent Clients',
-                              style: AppTypography.titleMedium,
-                            ),
-                            TextButton(
-                              onPressed: () => context.goNamed('customers'),
-                              child: const Text('See All'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _RecentClientsRow(),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-                  ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionHeader(
+                      title: 'Recent Clients',
+                      actionLabel: 'See All',
+                      onAction: () => context.goNamed('customers'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _RecentClientsRow(),
+                  ],
                 ),
               ),
 
@@ -217,14 +196,109 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+class _BusinessSetupBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      label: 'Business setup required',
+      child: AppSurfaceCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.business_outlined, color: colors.primary),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Set up your business to get started',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Choose a solo or team setup to manage appointments, services, and staff.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  FilledButton(
+                    onPressed: () => context.pushNamed('business-setup'),
+                    child: const Text('Set up your business'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PasswordChangePrompt extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Change your temporary password',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: colors.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'For your account security, you can set a new password now or later from Settings.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              FilledButton(
+                onPressed: () => context.pushNamed('change-password'),
+                child: const Text('Change password'),
+              ),
+              TextButton(
+                onPressed: () => ref
+                    .read(authNotifierProvider.notifier)
+                    .acknowledgePasswordChangePrompt(),
+                child: const Text('Not now'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _UpcomingBookingsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final upcomingAppointments = ref.watch(upcomingAppointmentsProvider);
     final hiveService = ref.watch(homeHiveProvider);
+    ref.watch(servicesProvider);
 
     return SizedBox(
-      height: 200,
+      // Keep breathing room inside the carousel so card shadows can paint
+      // above and below each card without being cut off by the viewport.
+      height: 216,
       child: upcomingAppointments.when(
         data: (appointments) {
           if (appointments.isEmpty) {
@@ -234,21 +308,25 @@ class _UpcomingBookingsList extends ConsumerWidget {
           }
           return ListView.builder(
             scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             itemCount: appointments.length,
             itemBuilder: (context, index) {
               final apt = appointments[index];
-              final customer = hiveService.getCustomerById(apt.customerId ?? -1);
+              final customer =
+                  hiveService.getCustomerById(apt.customerId ?? -1);
               final service = apt.serviceId != null
                   ? hiveService.getServiceById(apt.serviceId!)
                   : null;
               return Padding(
                 padding: EdgeInsets.only(
-                  right: index < appointments.length - 1 ? AppSpacing.md : 0,
+                  right: index < appointments.length - 1 ? AppSpacing.lg : 0,
                 ),
                 child: _BookingSquareCard(
                   appointment: apt,
                   customerName: customer?.name ?? 'Client',
                   serviceName: service?.title ?? 'Appointment',
+                  serviceColorValue: service?.colorValue,
                 ),
               );
             },
@@ -265,32 +343,17 @@ class _BookingSquareCard extends StatelessWidget {
   final Appointment appointment;
   final String customerName;
   final String serviceName;
+  final int? serviceColorValue;
 
   const _BookingSquareCard({
     required this.appointment,
     required this.customerName,
     required this.serviceName,
+    this.serviceColorValue,
   });
 
   static final _timeFormat = DateFormat('HH:mm');
   static final _dateFormat = DateFormat('EEE, MMM d');
-
-  Color _getPaleTimeBasedColor(DateTime time) {
-    final hour = time.hour;
-    if (hour >= 5 && hour < 11) {
-      // Morning - pale blue
-      return Color(0xFFB3D9FF);
-    } else if (hour >= 11 && hour < 17) {
-      // Noon - pale orange
-      return Color(0xFFFFCC80);
-    } else if (hour >= 17 && hour < 21) {
-      // Evening - pale purple
-      return Color(0xFFB39DDB);
-    } else {
-      // Night - pale slate
-      return Color(0xFF78909C);
-    }
-  }
 
   String _getStatusText(String? status) {
     switch (status) {
@@ -311,13 +374,14 @@ class _BookingSquareCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final paleColor = _getPaleTimeBasedColor(appointment.startTime);
+    final colorScheme = Theme.of(context).colorScheme;
+    final serviceColor = ServiceColorPalette.resolve(serviceColorValue).color;
     final statusText = _getStatusText(appointment.status);
 
     return InkWell(
       onTap: appointment.id != null
           ? () {
-              context.goNamed(
+              context.pushNamed(
                 'appointment-detail',
                 pathParameters: {'id': appointment.id.toString()},
               );
@@ -328,40 +392,28 @@ class _BookingSquareCard extends StatelessWidget {
         width: 160,
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: colorScheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryContainer.withValues(alpha: 0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: AppShadows.card(colorScheme.primaryContainer),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row: Status badge and chevron
+            // The service badge keeps the appointment visually tied to its
+            // service type across every appointment view.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: paleColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: AppTypography.labelSmall.copyWith(
-                      color: AppColors.onSurface,
-                      fontSize: 10,
-                    ),
+                Expanded(
+                  child: ServiceBadge(
+                    label: serviceName,
+                    colorValue: serviceColorValue,
+                    compact: true,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.xs),
                 Icon(
                   Icons.chevron_right,
-                  color: AppColors.secondary,
+                  color: colorScheme.onSurfaceVariant,
                   size: 20,
                 ),
               ],
@@ -370,9 +422,10 @@ class _BookingSquareCard extends StatelessWidget {
             // Time block - card-in-card style
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
+              padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
               decoration: BoxDecoration(
-                color: paleColor.withValues(alpha: 0.4),
+                color: serviceColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               ),
               child: Column(
@@ -380,7 +433,7 @@ class _BookingSquareCard extends StatelessWidget {
                   Text(
                     _timeFormat.format(appointment.startTime),
                     style: TextStyle(
-                      color: AppColors.onSurface,
+                      color: colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
                       fontSize: 24,
                       letterSpacing: 1.0,
@@ -389,7 +442,7 @@ class _BookingSquareCard extends StatelessWidget {
                   Text(
                     _dateFormat.format(appointment.startTime),
                     style: AppTypography.labelSmall.copyWith(
-                      color: AppColors.secondary,
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 10,
                     ),
                   ),
@@ -407,11 +460,12 @@ class _BookingSquareCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
-            // Service name
+            // Appointment status remains text, so meaning never relies on
+            // the service color alone.
             Text(
-              serviceName,
+              statusText,
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.secondary,
+                color: colorScheme.onSurfaceVariant,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -426,11 +480,12 @@ class _BookingSquareCard extends StatelessWidget {
 class _EmptyCarouselCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       width: 280,
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
       ),
       child: Row(
@@ -438,12 +493,12 @@ class _EmptyCarouselCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.primaryContainer.withValues(alpha: 0.1),
+              color: colors.primaryContainer.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),
             child: Icon(
               Icons.event_available_outlined,
-              color: AppColors.primaryContainer,
+              color: colors.onPrimaryContainer,
               size: 24,
             ),
           ),
@@ -472,6 +527,7 @@ class _EmptyCarouselCard extends StatelessWidget {
 class _AvailabilityGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final now = DateTime.now();
     final weeks = <List<DateTime>>[];
 
@@ -510,7 +566,7 @@ class _AvailabilityGrid extends StatelessWidget {
                     child: Text(
                       weekIndex == 0 ? 'This Week' : 'Next Week',
                       style: AppTypography.labelSmall.copyWith(
-                        color: AppColors.secondary,
+                        color: colors.onSurfaceVariant,
                         fontSize: 10,
                       ),
                     ),
@@ -547,11 +603,11 @@ class _AvailabilityGrid extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _LegendItem(color: AppColors.primaryFixedDim, label: 'Low'),
+              _LegendItem(color: colors.primaryFixedDim, label: 'Low'),
               const SizedBox(width: AppSpacing.lg),
-              _LegendItem(color: AppColors.primaryContainer, label: 'Medium'),
+              _LegendItem(color: colors.primaryContainer, label: 'Medium'),
               const SizedBox(width: AppSpacing.lg),
-              _LegendItem(color: AppColors.primary, label: 'High'),
+              _LegendItem(color: colors.primary, label: 'High'),
             ],
           ),
         ],
@@ -578,15 +634,21 @@ class _AvailabilityCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     Color cellColor;
+    Color cellForeground;
     if (level == 0) {
-      cellColor = AppColors.surfaceContainerHigh;
+      cellColor = colors.surfaceContainerHigh;
+      cellForeground = colors.onSurfaceVariant;
     } else if (level < 0.4) {
-      cellColor = AppColors.primaryFixedDim;
+      cellColor = colors.primaryFixedDim;
+      cellForeground = colors.onPrimaryFixedVariant;
     } else if (level < 0.7) {
-      cellColor = AppColors.primaryContainer;
+      cellColor = colors.primaryContainer;
+      cellForeground = colors.onPrimaryContainer;
     } else {
-      cellColor = AppColors.primary;
+      cellColor = colors.primary;
+      cellForeground = colors.onPrimary;
     }
 
     return Column(
@@ -597,15 +659,14 @@ class _AvailabilityCell extends StatelessWidget {
           decoration: BoxDecoration(
             color: cellColor,
             borderRadius: BorderRadius.circular(9999),
-            border: isToday
-                ? Border.all(color: AppColors.primary, width: 2)
-                : null,
+            border:
+                isToday ? Border.all(color: colors.primary, width: 2) : null,
           ),
           child: Center(
             child: Text(
               _getDayAbbreviation(),
               style: AppTypography.labelSmall.copyWith(
-                color: level > 0.5 ? Colors.white : AppColors.onPrimaryContainer,
+                color: cellForeground,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -616,7 +677,7 @@ class _AvailabilityCell extends StatelessWidget {
         Text(
           date.day.toString(),
           style: AppTypography.labelSmall.copyWith(
-            color: isToday ? AppColors.primary : AppColors.secondary,
+            color: isToday ? colors.primary : colors.onSurfaceVariant,
             fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
             fontSize: 10,
           ),
@@ -662,21 +723,19 @@ class _RecentClientsRow extends ConsumerWidget {
     return recentCustomers.when(
       data: (customers) {
         if (customers.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: _EmptyClientsCard(),
-          );
+          return _EmptyClientsCard();
         }
         return SizedBox(
-          height: 100,
+          height: 148,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             itemCount: customers.length,
             itemBuilder: (context, index) {
               return Padding(
                 padding: EdgeInsets.only(
-                  right: index < customers.length - 1 ? AppSpacing.md : 0,
+                  right: index < customers.length - 1 ? AppSpacing.lg : 0,
                 ),
                 child: _ClientCard(customer: customers[index]),
               );
@@ -688,81 +747,115 @@ class _RecentClientsRow extends ConsumerWidget {
         height: 100,
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        child: _EmptyClientsCard(),
-      ),
+      error: (_, __) => _EmptyClientsCard(),
     );
   }
 }
 
-class _ClientCard extends StatelessWidget {
+class _ClientCard extends StatefulWidget {
   final Customer customer;
 
   const _ClientCard({required this.customer});
 
   @override
-  Widget build(BuildContext context) {
-    final initials = customer.name.isNotEmpty
-        ? customer.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join()
-        : '?';
+  State<_ClientCard> createState() => _ClientCardState();
+}
 
-    return InkWell(
-      onTap: () {
-        context.goNamed(
-          'customer-profile',
-          pathParameters: {'id': customer.id.toString()},
-        );
-      },
-      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-      child: Container(
-        width: 80,
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  initials.toUpperCase(),
-                  style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.primaryContainer,
-                    fontWeight: FontWeight.w700,
+class _ClientCardState extends State<_ClientCard> {
+  static const _pressDuration = Duration(milliseconds: 120);
+  static const _pressedScale = 0.97;
+
+  bool _isPressed = false;
+
+  void _setPressed(bool value) {
+    if (_isPressed == value) return;
+    setState(() => _isPressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final customer = widget.customer;
+    final trimmedName = customer.name.trim();
+    final displayName = trimmedName.isEmpty ? 'Unnamed customer' : trimmedName;
+    final phone = customer.phoneNumber.trim();
+    final customerId = customer.id;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    void openProfile() {
+      if (customerId == null) return;
+      context.goNamed(
+        'customer-profile',
+        pathParameters: {'id': customerId.toString()},
+      );
+    }
+
+    return Semantics(
+      button: customerId != null,
+      enabled: customerId != null,
+      label: customerId == null ? displayName : 'Open $displayName profile',
+      child: GestureDetector(
+        excludeFromSemantics: true,
+        onTap: customerId == null ? null : openProfile,
+        onTapDown: customerId == null ? null : (_) => _setPressed(true),
+        onTapUp: customerId == null ? null : (_) => _setPressed(false),
+        onTapCancel: customerId == null ? null : () => _setPressed(false),
+        child: AnimatedScale(
+          scale: _isPressed && !reduceMotion ? _pressedScale : 1,
+          duration: reduceMotion ? Duration.zero : _pressDuration,
+          curve: Curves.easeOutCubic,
+          child: SizedBox(
+            width: 132,
+            child: AppSurfaceCard(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        trimmedName.isEmpty
+                            ? '?'
+                            : trimmedName[0].toUpperCase(),
+                        style: AppTypography.titleLarge.copyWith(
+                          color: colors.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    displayName,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: colors.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                  if (phone.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      phone,
+                      style: AppTypography.labelSmall.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              customer.name,
-              style: AppTypography.labelSmall.copyWith(
-                color: AppColors.onSurface,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              customer.phoneNumber,
-              style: AppTypography.labelSmall.copyWith(
-                color: AppColors.secondary,
-                fontSize: 9,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -772,10 +865,11 @@ class _ClientCard extends StatelessWidget {
 class _EmptyClientsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       ),
       child: Row(
@@ -783,12 +877,12 @@ class _EmptyClientsCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.secondaryContainer,
+              color: colors.secondaryContainer,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),
             child: Icon(
               Icons.people_outline,
-              color: AppColors.onSecondaryContainer,
+              color: colors.onSecondaryContainer,
               size: 24,
             ),
           ),

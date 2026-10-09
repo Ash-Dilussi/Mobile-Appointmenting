@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/auth/rbac.dart';
@@ -9,6 +8,7 @@ import '../../../../core/database/collections/user.dart';
 import '../../../../core/database/collections/leave_request.dart';
 import '../../../../core/providers/hive_service_provider.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
+import '../../../../shared/widgets/app_date_picker_sheet.dart';
 
 class OperatorProfileScreen extends ConsumerStatefulWidget {
   final String operatorId;
@@ -16,7 +16,8 @@ class OperatorProfileScreen extends ConsumerStatefulWidget {
   const OperatorProfileScreen({super.key, required this.operatorId});
 
   @override
-  ConsumerState<OperatorProfileScreen> createState() => _OperatorProfileScreenState();
+  ConsumerState<OperatorProfileScreen> createState() =>
+      _OperatorProfileScreenState();
 }
 
 class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
@@ -55,11 +56,12 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
   }
 
   Future<void> _selectBirthdate() async {
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: _birthdate ?? DateTime(1990),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      minimumDate: DateTime(1900),
+      maximumDate: DateTime.now(),
+      title: 'Select date of birth',
     );
     if (picked != null) {
       setState(() => _birthdate = picked);
@@ -70,8 +72,12 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
     final hiveService = ref.read(hiveServiceProvider);
 
     operator.name = _nameController.text.trim();
-    operator.address = _addressController.text.trim().isEmpty ? null : _addressController.text.trim();
-    operator.phone = _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim();
+    operator.address = _addressController.text.trim().isEmpty
+        ? null
+        : _addressController.text.trim();
+    operator.phone = _phoneController.text.trim().isEmpty
+        ? null
+        : _phoneController.text.trim();
     operator.gender = _gender;
     operator.birthdate = _birthdate;
 
@@ -89,10 +95,10 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Leave Company?'),
-        content: Text(
-          'Are you sure you want to request leaving ${operator.institutionId}? '
-          'This request will be sent to the company owner for approval.',
+        title: const Text('Leave Business?'),
+        content: const Text(
+          'Are you sure you want to request leaving this business? '
+          'This request will be sent to the business owner for approval.',
         ),
         actions: [
           TextButton(
@@ -145,6 +151,7 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
     final hiveService = ref.watch(hiveServiceProvider);
     final operator = hiveService.getUserById(widget.operatorId);
@@ -165,7 +172,7 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: Text(isOwnProfile ? 'My Profile' : 'Operator Profile'),
         centerTitle: true,
@@ -187,12 +194,15 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
             ),
         ],
       ),
-      body: _isEditing ? _buildEditView(operator) : _buildProfileView(operator, isOwnProfile),
+      body: _isEditing
+          ? _buildEditView(operator)
+          : _buildProfileView(operator, isOwnProfile),
     );
   }
 
   Widget _buildProfileView(User operator, bool isOwnProfile) {
     final age = _calculateAge(operator.birthdate);
+    final colors = Theme.of(context).colorScheme;
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
@@ -201,13 +211,13 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
         Center(
           child: CircleAvatar(
             radius: 50,
-            backgroundColor: AppColors.primaryContainer,
+            backgroundColor: colors.primaryContainer,
             child: Text(
               operator.name.isNotEmpty ? operator.name[0].toUpperCase() : '?',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 40,
                 fontWeight: FontWeight.bold,
-                color: AppColors.onPrimaryContainer,
+                color: colors.onPrimaryContainer,
               ),
             ),
           ),
@@ -227,14 +237,16 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
               color: operator.role == 'owner'
-                  ? AppColors.primaryContainer
-                  : AppColors.surfaceContainerHigh,
+                  ? colors.primaryContainer
+                  : colors.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               operator.role == 'owner' ? 'Owner' : 'Officer',
               style: AppTypography.labelMedium.copyWith(
-                color: operator.role == 'owner' ? AppColors.primary : AppColors.secondary,
+                color: operator.role == 'owner'
+                    ? colors.primary
+                    : colors.onSurfaceVariant,
               ),
             ),
           ),
@@ -245,14 +257,17 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
             padding: const EdgeInsets.only(top: AppSpacing.md),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
+                  color: colors.errorContainer,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
                   'Pending Leave Request',
-                  style: AppTypography.labelMedium.copyWith(color: AppColors.error),
+                  style: AppTypography.labelMedium.copyWith(
+                    color: colors.onErrorContainer,
+                  ),
                 ),
               ),
             ),
@@ -262,33 +277,46 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
 
         // Info cards
         _buildInfoCard(Icons.email_outlined, 'Email', operator.email),
-        _buildInfoCard(Icons.phone_outlined, 'Phone', operator.phone ?? 'Not set'),
-        _buildInfoCard(Icons.location_on_outlined, 'Address', operator.address ?? 'Not set'),
-        _buildInfoCard(Icons.cake_outlined, 'Birthdate',
+        _buildInfoCard(
+            Icons.phone_outlined, 'Phone', operator.phone ?? 'Not set'),
+        _buildInfoCard(Icons.location_on_outlined, 'Address',
+            operator.address ?? 'Not set'),
+        _buildInfoCard(
+            Icons.cake_outlined,
+            'Birthdate',
             operator.birthdate != null
                 ? '${operator.birthdate!.day}/${operator.birthdate!.month}/${operator.birthdate!.year}${age != null ? ' ($age years)' : ''}'
                 : 'Not set'),
-        _buildInfoCard(Icons.wc_outlined, 'Gender',
-            operator.gender != null ? _capitalize(operator.gender!) : 'Not set'),
+        _buildInfoCard(
+            Icons.wc_outlined,
+            'Gender',
+            operator.gender != null
+                ? _capitalize(operator.gender!)
+                : 'Not set'),
 
         const SizedBox(height: AppSpacing.xxl),
 
-        // Leave Company button (only for operators, not owners, on own profile)
-        if (operator.role == 'officer' && isOwnProfile && operator.status != 'pending_leave')
+        // Leave Business button (only for officers, not owners, on own profile)
+        if (operator.role == 'officer' &&
+            isOwnProfile &&
+            operator.status != 'pending_leave')
           OutlinedButton.icon(
             onPressed: () => _requestLeaveCompany(operator),
-            icon: const Icon(Icons.exit_to_app, color: AppColors.error),
-            label: const Text('Leave Company', style: TextStyle(color: AppColors.error)),
+            icon: Icon(Icons.exit_to_app, color: colors.error),
+            label: Text(
+              'Leave Business',
+              style: TextStyle(color: colors.error),
+            ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.error),
+              side: BorderSide(color: colors.error),
             ),
           ),
 
         if (operator.status == 'pending_leave')
-          const Center(
+          Center(
             child: Text(
-              'Your leave request is pending approval from the company owner.',
-              style: TextStyle(color: AppColors.secondary),
+              'Your leave request is pending approval from the business owner.',
+              style: TextStyle(color: colors.onSurfaceVariant),
             ),
           ),
       ],
@@ -296,11 +324,15 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
   }
 
   Widget _buildInfoCard(IconData icon, String label, String value) {
+    final colors = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       child: ListTile(
-        leading: Icon(icon, color: AppColors.secondary),
-        title: Text(label, style: AppTypography.labelSmall.copyWith(color: AppColors.secondary)),
+        leading: Icon(icon, color: colors.onSurfaceVariant),
+        title: Text(label,
+            style: AppTypography.labelSmall.copyWith(
+              color: colors.onSurfaceVariant,
+            )),
         subtitle: Text(value, style: AppTypography.bodyMedium),
       ),
     );
@@ -386,5 +418,6 @@ class _OperatorProfileScreenState extends ConsumerState<OperatorProfileScreen> {
     );
   }
 
-  String _capitalize(String s) => s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : s;
+  String _capitalize(String s) =>
+      s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : s;
 }

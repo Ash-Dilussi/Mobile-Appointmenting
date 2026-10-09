@@ -34,7 +34,8 @@ class GoogleCalendarService {
         ..dateTime = end.toUtc()
         ..timeZone = 'UTC');
 
-    final created = await _withRetry(() => api.events.insert(event, _calendarId));
+    final created =
+        await _withRetry(() => api.events.insert(event, _calendarId));
     if (created.id == null) {
       throw Exception('Google Calendar returned event with null ID');
     }
@@ -71,28 +72,29 @@ class GoogleCalendarService {
     }
   }
 
-  Future<List<CalendarBlock>> fetchExternalEvents(DateTime from, DateTime to) async {
+  Future<List<CalendarBlock>> fetchExternalEvents(
+      DateTime from, DateTime to) async {
     final api = await _api();
     final result = await _withRetry(() => api.events.list(
-      _calendarId,
-      timeMin: from.toUtc(),
-      timeMax: to.toUtc(),
-      singleEvents: true,
-      orderBy: 'startTime',
-    ));
+          _calendarId,
+          timeMin: from.toUtc(),
+          timeMax: to.toUtc(),
+          singleEvents: true,
+          orderBy: 'startTime',
+        ));
 
     return (result.items ?? [])
         .where((e) => e.start?.dateTime != null && e.end?.dateTime != null)
         .map((e) => CalendarBlock(
-          id: e.id ?? '',
-          title: e.summary ?? '(No title)',
-          start: e.start!.dateTime!.toLocal(),
-          end: e.end!.dateTime!.toLocal(),
-          source: EventSource.google,
-          displayColor: const Color(0xFFEA4335),
-          googleEventId: e.id,
-          subtitle: e.organizer?.displayName,
-        ))
+              id: e.id ?? '',
+              title: e.summary ?? '(No title)',
+              start: e.start!.dateTime!.toLocal(),
+              end: e.end!.dateTime!.toLocal(),
+              source: EventSource.google,
+              displayColor: const Color(0xFFEA4335),
+              googleEventId: e.id,
+              subtitle: e.organizer?.displayName,
+            ))
         .toList();
   }
 

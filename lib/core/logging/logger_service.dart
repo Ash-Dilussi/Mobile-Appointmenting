@@ -82,9 +82,11 @@ class LoggerService {
     // Only log errors to file - reduce noise in production logs
     if (level != LogLevel.error) return;
 
-    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
+    final timestamp =
+        DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
     final levelStr = level.name.toUpperCase().padRight(7);
-    final sourceStr = source.length > 30 ? source.substring(0, 30) : source.padRight(30);
+    final sourceStr =
+        source.length > 30 ? source.substring(0, 30) : source.padRight(30);
 
     String logLine = '[$timestamp] [$levelStr] [$sourceStr] $message';
 
@@ -93,7 +95,8 @@ class LoggerService {
     }
 
     if (stackTrace != null) {
-      logLine += '\n  StackTrace: ${stackTrace.toString().replaceAll('\n', '\n  ')}';
+      logLine +=
+          '\n  StackTrace: ${stackTrace.toString().replaceAll('\n', '\n  ')}';
     }
 
     logLine += '\n';
@@ -150,9 +153,7 @@ class LoggerService {
 
       if (allLines.length <= lines) return content;
 
-      return allLines
-          .skip(allLines.length - lines)
-          .join('\n');
+      return allLines.skip(allLines.length - lines).join('\n');
     } catch (e) {
       return 'Error reading logs: $e';
     }

@@ -41,6 +41,7 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
+  cloud_functions: ^5.6.2
 
   # Google Calendar integration
   google_sign_in: ^6.2.1
@@ -53,7 +54,10 @@ dependencies:
 
   # Call Recording & Speech
   permission_handler: ^11.3.1
-  # speech_to_text: ^7.0.0  # TEMPORARILY DISABLED - causes Kotlin daemon crash on paths with spaces
+  # MVP SCOPE: voice booking is intentionally excluded from the first release.
+  # Keep dormant implementation code; re-add a speech dependency only through
+  # a planned post-MVP feature with native build, permission, and UX validation.
+  # speech_to_text: ^7.0.0
 
   # Contact Import
   flutter_contacts: ^1.1.9+2

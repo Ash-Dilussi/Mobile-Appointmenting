@@ -104,16 +104,19 @@ class StationDetailScreen extends ConsumerWidget {
                     icon: Icons.location_on,
                     label: 'Address',
                     value: station.address!,
-                    onTap: () => _copyToClipboard(context, station.address!, 'Address'),
+                    onTap: () =>
+                        _copyToClipboard(context, station.address!, 'Address'),
                   ),
                 if (station.phone != null && station.phone!.isNotEmpty)
                   _InfoRow(
                     icon: Icons.phone,
                     label: 'Phone',
                     value: station.phone!,
-                    onTap: () => _copyToClipboard(context, station.phone!, 'Phone'),
+                    onTap: () =>
+                        _copyToClipboard(context, station.phone!, 'Phone'),
                   ),
-                if (station.description != null && station.description!.isNotEmpty)
+                if (station.description != null &&
+                    station.description!.isNotEmpty)
                   _InfoRow(
                     icon: Icons.notes,
                     label: 'Description',

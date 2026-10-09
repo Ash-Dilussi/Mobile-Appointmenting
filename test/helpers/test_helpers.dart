@@ -25,6 +25,8 @@ class TestHiveHelpers {
     int durationSeconds = 60,
     bool isMissed = false,
     bool followedUp = false,
+    String? institutionId = 'test-inst',
+    String? handledByUserId = 'test-user',
   }) {
     return CallLog()
       ..id = id
@@ -34,6 +36,8 @@ class TestHiveHelpers {
       ..durationSeconds = durationSeconds
       ..isMissed = isMissed
       ..followedUp = followedUp
+      ..institutionId = institutionId
+      ..handledByUserId = handledByUserId
       ..createdAt = DateTime.now()
       ..synced = false;
   }
@@ -46,7 +50,9 @@ class TestHiveHelpers {
     DateTime? startTime,
     DateTime? endTime,
     String status = 'upcoming',
-    String? notes,
+    List<AppointmentNote> notes = const <AppointmentNote>[],
+    String? institutionId = 'test-inst',
+    String? handledByUserId = 'test-user',
   }) {
     final start = startTime ?? DateTime.now().add(const Duration(hours: 1));
     return Appointment()
@@ -56,7 +62,9 @@ class TestHiveHelpers {
       ..startTime = start
       ..endTime = endTime ?? start.add(const Duration(hours: 1))
       ..status = status
-      ..notes = notes
+      ..notes = List<AppointmentNote>.of(notes)
+      ..institutionId = institutionId
+      ..handledByUserId = handledByUserId
       ..createdAt = DateTime.now()
       ..updatedAt = DateTime.now()
       ..synced = false;
@@ -68,14 +76,16 @@ class TestHiveHelpers {
     String name = 'Test Customer',
     String phoneNumber = '+1234567890',
     String? email,
-    String? notes,
+    List<CustomerNote> notes = const <CustomerNote>[],
+    String? institutionId = 'test-inst',
   }) {
     return Customer()
       ..id = id
       ..name = name
       ..phoneNumber = phoneNumber
       ..email = email
-      ..notes = notes
+      ..notes = List<CustomerNote>.of(notes)
+      ..institutionId = institutionId
       ..createdAt = DateTime.now()
       ..updatedAt = DateTime.now()
       ..synced = false;
@@ -88,6 +98,8 @@ class TestHiveHelpers {
     int defaultDurationMinutes = 60,
     double cost = 99.99,
     String? description,
+    int? colorValue,
+    String? institutionId = 'test-inst',
   }) {
     return Service()
       ..id = id
@@ -95,6 +107,8 @@ class TestHiveHelpers {
       ..defaultDurationMinutes = defaultDurationMinutes
       ..cost = cost
       ..description = description
+      ..colorValue = colorValue
+      ..institutionId = institutionId
       ..createdAt = DateTime.now()
       ..updatedAt = DateTime.now()
       ..synced = false;

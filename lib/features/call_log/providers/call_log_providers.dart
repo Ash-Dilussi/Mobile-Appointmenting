@@ -6,9 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/call_log_entry.dart';
 import '../data/repositories/call_log_repository.dart';
 import '../domain/contact_suite_data.dart';
+import '../../../core/database/collections/call_log.dart';
+import '../../../core/database/hive_service.dart';
+import '../../auth/presentation/providers/auth_session_provider.dart';
 import '../../home/presentation/providers/home_provider.dart';
-import '../../../core/database/collections/appointment.dart';
-import '../../../core/database/collections/customer.dart';
 
 // Repository provider
 final callLogRepositoryProvider = Provider<CallLogRepository>((ref) {
@@ -27,7 +28,10 @@ enum ActiveCallState { none, ringing, ongoing }
 
 final activeCallStateProvider =
     StateNotifierProvider<ActiveCallNotifier, ActiveCallState>(
-  (ref) => ActiveCallNotifier(ref.watch(callLogRepositoryProvider)),
+  (ref) => ActiveCallNotifier(
+    ref.watch(homeHiveProvider),
+    ref.watch(authSessionProvider),
+  ),
 );
 
 // Contact Suite Provider - loads customer + appointments for a given customerId
@@ -36,11 +40,18 @@ final contactSuiteProvider = FutureProvider.family<ContactSuiteData?, int?>(
     if (customerId == null) return null;
 
     final db = ref.watch(homeHiveProvider);
+    final institutionId = ref.watch(authSessionProvider)?.institutionId;
+    if (institutionId == null || institutionId.isEmpty) return null;
     final customer = db.getCustomerById(customerId);
-    if (customer == null) return null;
+    if (customer == null || customer.institutionId != institutionId) {
+      return null;
+    }
 
     // Load all appointments for this customer
-    final allAppointments = db.getAppointmentsForCustomer(customerId);
+    final allAppointments = db
+        .getAppointmentsForCustomer(customerId)
+        .where((appointment) => appointment.institutionId == institutionId)
+        .toList();
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -69,12 +80,12 @@ final contactSuiteProvider = FutureProvider.family<ContactSuiteData?, int?>(
 );
 
 class ActiveCallNotifier extends StateNotifier<ActiveCallState> {
-  final CallLogRepository _repository;
+  final HiveService _hiveService;
+  final AuthSession? _session;
   StreamSubscription? _eventSubscription;
-  String? _currentEntryId;
-  String _lastState = 'idle'; // Track previous state to detect missed calls
 
-  ActiveCallNotifier(this._repository) : super(ActiveCallState.none) {
+  ActiveCallNotifier(this._hiveService, this._session)
+      : super(ActiveCallState.none) {
     _initEventChannel();
   }
 
@@ -85,14 +96,15 @@ class ActiveCallNotifier extends StateNotifier<ActiveCallState> {
       (event) {
         if (event is Map) {
           final type = event['type'] as String?;
-          final number = event['number'] as String? ?? '';
 
           if (type == 'ringing') {
-            _handleRinging(number);
+            state = ActiveCallState.ringing;
           } else if (type == 'offhook') {
-            _handleOffhook();
+            state = ActiveCallState.ongoing;
           } else if (type == 'idle') {
-            _handleIdle();
+            state = ActiveCallState.none;
+          } else if (type == 'completed_call') {
+            unawaited(_saveCompletedCall(event));
           }
         }
       },
@@ -102,64 +114,40 @@ class ActiveCallNotifier extends StateNotifier<ActiveCallState> {
     );
   }
 
-  Future<void> _handleRinging(String phoneNumber) async {
-    state = ActiveCallState.ringing;
-    _lastState = 'ringing';
+  Future<void> _saveCompletedCall(Map<dynamic, dynamic> event) async {
+    final institutionId = _session?.institutionId;
+    final userId = _session?.userId;
+    final timestampMillis = event['timestampMillis'];
+    final durationSeconds = event['durationSeconds'];
+    final phoneNumber = event['number'] as String? ?? '';
 
-    // Create new CallLogEntry with state = 'ringing'
-    final entry = CallLogEntry.create(
-      id: '',
-      phoneNumber: phoneNumber,
-      callType: 'incoming',
-      startTime: DateTime.now(),
-      state: 'ringing',
-    );
-
-    await _repository.saveEntry(entry);
-
-    // Get the entry id after save (the entry gets a UUID before save)
-    final allEntries = _repository.getAllEntries();
-    if (allEntries.isNotEmpty) {
-      _currentEntryId = allEntries.first.id;
-    }
-  }
-
-  Future<void> _handleOffhook() async {
-    state = ActiveCallState.ongoing;
-    _lastState = 'offhook';
-
-    if (_currentEntryId != null) {
-      await _repository.updateEntry(_currentEntryId!, state: 'ongoing');
-    }
-  }
-
-  Future<void> _handleIdle() async {
-    state = ActiveCallState.none;
-
-    if (_currentEntryId != null) {
-      final now = DateTime.now();
-
-      // If state was ringing and never went offhook, it's a missed call
-      if (_lastState == 'ringing') {
-        await _repository.updateEntry(
-          _currentEntryId!,
-          state: 'missed',
-          endTime: now,
-          durationSeconds: 0,
-        );
-      } else {
-        // Call was answered and ended
-        await _repository.updateEntry(
-          _currentEntryId!,
-          state: 'completed',
-          endTime: now,
-        );
-      }
-
-      _currentEntryId = null;
+    // Never create ambiguous, unscoped analytics data. A completed call can be
+    // captured only after the authenticated institution context is available.
+    if (institutionId == null ||
+        institutionId.isEmpty ||
+        userId == null ||
+        timestampMillis is! num ||
+        durationSeconds is! num) {
+      return;
     }
 
-    _lastState = 'idle';
+    final isMissed = event['isMissed'] == true;
+    final direction =
+        event['direction'] as String? ?? (isMissed ? 'missed' : 'incoming');
+    final safeDuration = durationSeconds.toInt();
+    final callLog = CallLog()
+      ..phoneNumber = phoneNumber
+      ..timestamp = DateTime.fromMillisecondsSinceEpoch(
+        timestampMillis.toInt(),
+      )
+      ..direction = direction
+      ..durationSeconds = safeDuration < 0 ? 0 : safeDuration
+      ..isMissed = isMissed
+      ..followedUp = false
+      ..institutionId = institutionId
+      ..handledByUserId = userId;
+
+    await _hiveService.insertCallLog(callLog);
   }
 
   @override

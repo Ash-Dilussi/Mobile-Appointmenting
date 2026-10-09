@@ -1,9 +1,18 @@
 import 'package:hive/hive.dart';
 
+import 'appointment_note.dart';
+
 part 'appointment.g.dart';
 
 @HiveType(typeId: 2)
 class Appointment extends HiveObject {
+  static const String statusUpcoming = 'upcoming';
+  static const String statusConfirmed = 'confirmed';
+  static const String statusOngoing = 'ongoing';
+  static const String statusDone = 'done';
+  static const String statusCancelled = 'cancelled';
+  static const String statusNoShow = 'no_show';
+
   @HiveField(0)
   int? id;
 
@@ -20,10 +29,15 @@ class Appointment extends HiveObject {
   late DateTime endTime;
 
   @HiveField(5)
-  late String status; // upcoming, confirmed, ongoing, done, cancelled
+  late String status;
 
   @HiveField(6)
-  String? notes;
+
+  /// Deprecated storage-only field for pre-structured-note records.
+  ///
+  /// Keep this field index intact for Hive compatibility. Product surfaces do
+  /// not display or auto-convert it because no user-authored title exists.
+  String? legacyNotes;
 
   @HiveField(7)
   int? staffId;
@@ -49,8 +63,15 @@ class Appointment extends HiveObject {
   @HiveField(14)
   String? googleEventId;
 
-  @HiveField(15)
+  @HiveField(15, defaultValue: false)
   bool syncWithGoogle = false;
+
+  /// Structured notes created with the current appointment-notes editor.
+  ///
+  /// The empty default keeps appointments written by older app versions
+  /// readable without converting or exposing their legacy free-text note.
+  @HiveField(16, defaultValue: <AppointmentNote>[])
+  List<AppointmentNote> notes = <AppointmentNote>[];
 
   Appointment();
 }

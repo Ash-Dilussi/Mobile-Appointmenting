@@ -7,8 +7,6 @@ import 'app.dart';
 import 'core/firebase/firebase_options.dart';
 import 'core/logging/logger_service.dart';
 import 'core/database/hive_service.dart';
-import 'features/call_log/providers/call_log_providers.dart';
-import 'features/subscription/data/subscription_repository.dart';
 import 'features/subscription/data/subscription_repository_impl.dart';
 import 'core/entitlements/entitlement_provider.dart';
 
@@ -19,7 +17,6 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize Hive before accessing any boxes
   await HiveService.instance.init();
 
   await logger.init();
@@ -55,9 +52,6 @@ void main() async {
   runApp(
     ProviderScope(
       overrides: [
-        // Existing override
-        activeCallStateProvider,
-
         // Wire concrete SubscriptionRepository
         // The abstract provider throws UnimplementedError by default;
         // this override provides the real implementation.

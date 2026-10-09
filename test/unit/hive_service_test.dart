@@ -3,8 +3,79 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bookly/core/database/collections/collections.dart';
 import 'package:bookly/core/database/hive_service.dart';
+import 'package:bookly/features/call_log/data/models/call_log_entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../helpers/test_helpers.dart';
+
+Future<Box<Service>> _openServiceBoxSnapshot() async {
+  final sourceBox = Hive.box<Service>(HiveService.servicesBox);
+  await sourceBox.flush();
+
+  final sourcePath = sourceBox.path;
+  if (sourcePath == null) {
+    throw StateError('Service box does not have a disk path');
+  }
+
+  final snapshotName =
+      'services_snapshot_${DateTime.now().microsecondsSinceEpoch}';
+  final sourceFile = File(sourcePath);
+  final snapshotPath =
+      '${sourceFile.parent.path}${Platform.pathSeparator}$snapshotName.hive';
+  await sourceFile.copy(snapshotPath);
+  return Hive.openBox<Service>(snapshotName);
+}
+
+Future<Box<ServiceStation>> _openServiceStationBoxSnapshot() async {
+  final sourceBox = Hive.box<ServiceStation>(HiveService.serviceStationsBox);
+  await sourceBox.flush();
+
+  final sourcePath = sourceBox.path;
+  if (sourcePath == null) {
+    throw StateError('Service-station box does not have a disk path');
+  }
+
+  final snapshotName =
+      'service_stations_snapshot_${DateTime.now().microsecondsSinceEpoch}';
+  final sourceFile = File(sourcePath);
+  final snapshotPath =
+      '${sourceFile.parent.path}${Platform.pathSeparator}$snapshotName.hive';
+  await sourceFile.copy(snapshotPath);
+  return Hive.openBox<ServiceStation>(snapshotName);
+}
+
+Future<Box<Appointment>> _openAppointmentBoxSnapshot() async {
+  final sourceBox = Hive.box<Appointment>(HiveService.appointmentsBox);
+  await sourceBox.flush();
+
+  final sourcePath = sourceBox.path;
+  if (sourcePath == null) {
+    throw StateError('Appointment box does not have a disk path');
+  }
+
+  final snapshotName =
+      'appointments_snapshot_${DateTime.now().microsecondsSinceEpoch}';
+  final sourceFile = File(sourcePath);
+  final snapshotPath =
+      '${sourceFile.parent.path}${Platform.pathSeparator}$snapshotName.hive';
+  await sourceFile.copy(snapshotPath);
+  return Hive.openBox<Appointment>(snapshotName);
+}
+
+Future<Box<Customer>> _openCustomerBoxSnapshot() async {
+  final sourceBox = Hive.box<Customer>(HiveService.customersBox);
+  await sourceBox.flush();
+  final sourcePath = sourceBox.path;
+  if (sourcePath == null) {
+    throw StateError('Customer box does not have a disk path');
+  }
+  final snapshotName =
+      'customers_snapshot_${DateTime.now().microsecondsSinceEpoch}';
+  final sourceFile = File(sourcePath);
+  final snapshotPath =
+      '${sourceFile.parent.path}${Platform.pathSeparator}$snapshotName.hive';
+  await sourceFile.copy(snapshotPath);
+  return Hive.openBox<Customer>(snapshotName);
+}
 
 /// Unit tests for HiveService CRUD operations
 /// These tests use actual Hive in-memory boxes for integration testing
@@ -59,6 +130,33 @@ void main() {
   });
 
   group('HiveService CallLog CRUD', () {
+    test('insertAppInitiatedCallLog stores customer and staff attribution',
+        () async {
+      final customer = TestHiveHelpers.createCustomer(
+        phoneNumber: '0712345678',
+        institutionId: 'test-inst',
+      );
+      final customerId = await hiveService.insertCustomer(customer);
+
+      final callLogId = await hiveService.insertAppInitiatedCallLog(
+        customerId: customerId!,
+        phoneNumber: '0712345678',
+        institutionId: 'test-inst',
+        handledByUserId: 'test-user',
+        timestamp: DateTime(2026, 9, 23, 10, 15),
+      );
+
+      final callLog = hiveService.getCallLogById(callLogId!);
+      expect(callLog, isNotNull);
+      expect(callLog!.customerId, customerId);
+      expect(callLog.handledByUserId, 'test-user');
+      expect(callLog.institutionId, 'test-inst');
+      expect(callLog.origin, CallLog.originAppInitiated);
+      expect(callLog.direction, 'outgoing');
+      expect(callLog.durationSeconds, 0);
+      expect(callLog.isMissed, isFalse);
+    });
+
     test('insertCallLog should insert and return key', () async {
       final callLog = TestHiveHelpers.createCallLog(
         phoneNumber: '+1234567890',
@@ -189,6 +287,92 @@ void main() {
       expect(appointment.id, equals(key));
     });
 
+    test('structured notes persist across a cold box reload', () async {
+      final createdAt = DateTime(2026, 9, 6, 9, 30);
+      final updatedAt = DateTime(2026, 9, 6, 10, 15);
+      final appointment = TestHiveHelpers.createAppointment(
+        notes: [
+          AppointmentNote(
+            id: 'note-1',
+            title: 'Preparation',
+            description: 'Arrive ten minutes early',
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+          ),
+          AppointmentNote(
+            id: 'note-2',
+            title: 'Accessibility',
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+          ),
+        ],
+      );
+
+      final key = await hiveService.insertAppointment(appointment);
+      final snapshot = await _openAppointmentBoxSnapshot();
+
+      try {
+        final restored = snapshot.get(key);
+        expect(restored, isNotNull);
+        expect(restored!.id, key);
+        expect(restored.notes, hasLength(2));
+        expect(restored.notes.first.id, 'note-1');
+        expect(restored.notes.first.title, 'Preparation');
+        expect(
+          restored.notes.first.description,
+          'Arrive ten minutes early',
+        );
+        expect(restored.notes.first.createdAt, createdAt);
+        expect(restored.notes.first.updatedAt, updatedAt);
+        expect(restored.notes.last.title, 'Accessibility');
+        expect(restored.notes.last.description, isNull);
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('backfill restores and persists historical missing appointment ids',
+        () async {
+      final box = Hive.box<Appointment>(HiveService.appointmentsBox);
+      final appointment = TestHiveHelpers.createAppointment()..id = null;
+      final key = await box.add(appointment);
+      await box.flush();
+
+      expect(box.get(key)?.id, isNull);
+
+      await hiveService.backfillAppointmentIds();
+      await hiveService.backfillAppointmentIds();
+
+      expect(box.get(key)?.id, key);
+
+      final snapshot = await _openAppointmentBoxSnapshot();
+      try {
+        expect(snapshot.get(key)?.id, key);
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('legacy free text is retained without automatic conversion', () async {
+      final appointment = TestHiveHelpers.createAppointment()
+        ..legacyNotes = 'Historical note without a user-authored title';
+
+      final key = await hiveService.insertAppointment(appointment);
+      final snapshot = await _openAppointmentBoxSnapshot();
+
+      try {
+        final restored = snapshot.get(key);
+        expect(restored, isNotNull);
+        expect(
+          restored!.legacyNotes,
+          'Historical note without a user-authored title',
+        );
+        expect(restored.notes, isEmpty);
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
     test('getAllAppointments should return all appointments', () async {
       final appointment1 = TestHiveHelpers.createAppointment(customerId: 1);
       final appointment2 = TestHiveHelpers.createAppointment(customerId: 2);
@@ -279,6 +463,26 @@ void main() {
   });
 
   group('HiveService Customer CRUD', () {
+    test('clearAllData clears subscription and alternate call-log stores',
+        () async {
+      await hiveService.subscriptionBox.put('sub_test-inst', 'pro');
+      final alternateCallLogBox = Hive.box<CallLogEntry>(CallLogBox.boxName);
+      final entry = CallLogEntry.create(
+        id: 'native-call-1',
+        phoneNumber: '+94710000000',
+        callType: 'outgoing',
+        startTime: DateTime(2026, 9, 23),
+        durationSeconds: 30,
+        state: 'completed',
+      );
+      await alternateCallLogBox.put(entry.id, entry);
+
+      await hiveService.clearAllData();
+
+      expect(hiveService.subscriptionBox, isEmpty);
+      expect(alternateCallLogBox, isEmpty);
+    });
+
     test('insertCustomer should insert and set id', () async {
       final customer = TestHiveHelpers.createCustomer(
         name: 'John Doe',
@@ -289,6 +493,74 @@ void main() {
 
       expect(key, isNotNull);
       expect(customer.id, equals(key));
+    });
+
+    test('insertCustomer persists id across a cold box reload', () async {
+      final customer = TestHiveHelpers.createCustomer(name: 'Restart-safe');
+
+      final key = await hiveService.insertCustomer(customer);
+      final snapshot = await _openCustomerBoxSnapshot();
+      try {
+        expect(snapshot.get(key)?.id, equals(key));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('backfillCustomerIds repairs only customers with missing ids',
+        () async {
+      final box = Hive.box<Customer>(HiveService.customersBox);
+      final missingIdCustomer =
+          TestHiveHelpers.createCustomer(name: 'Missing id')..id = null;
+      final validCustomer = TestHiveHelpers.createCustomer(name: 'Valid id')
+        ..id = 999;
+      final missingIdKey = await box.add(missingIdCustomer);
+      final validKey = await box.add(validCustomer);
+
+      await hiveService.backfillCustomerIds();
+      await hiveService.backfillCustomerIds();
+
+      expect(box.get(missingIdKey)?.id, equals(missingIdKey));
+      expect(box.get(validKey)?.id, equals(999));
+
+      final snapshot = await _openCustomerBoxSnapshot();
+      try {
+        expect(snapshot.get(missingIdKey)?.id, equals(missingIdKey));
+        expect(snapshot.get(validKey)?.id, equals(999));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('dob and structured notes persist across a cold box reload', () async {
+      final createdAt = DateTime(2026, 9, 6, 9, 30);
+      final customer = TestHiveHelpers.createCustomer(
+        notes: [
+          CustomerNote(
+            id: 'customer-note-1',
+            title: 'Communication preference',
+            description: 'Text before calling',
+            createdAt: createdAt,
+            updatedAt: createdAt,
+          ),
+        ],
+      )
+        ..dob = DateTime(1992, 2, 29)
+        ..legacyNotes = 'Historical note';
+
+      final key = await hiveService.insertCustomer(customer);
+      final snapshot = await _openCustomerBoxSnapshot();
+      try {
+        final restored = snapshot.get(key);
+        expect(restored, isNotNull);
+        expect(restored!.dob, DateTime(1992, 2, 29));
+        expect(restored.legacyNotes, 'Historical note');
+        expect(restored.notes, hasLength(1));
+        expect(restored.notes.single.title, 'Communication preference');
+        expect(restored.notes.single.description, 'Text before calling');
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
     });
 
     test('getCustomerByPhone should find customer by phone number', () async {
@@ -303,6 +575,17 @@ void main() {
 
       expect(found, isNotNull);
       expect(found?.name, equals('John Doe'));
+    });
+
+    test('getCustomerByPhone matches Sri Lankan formatting variants', () async {
+      final customer = TestHiveHelpers.createCustomer(
+        name: 'Nimali',
+        phoneNumber: '+94 71 234 5678',
+      );
+      await hiveService.insertCustomer(customer);
+
+      expect(hiveService.getCustomerByPhone('071 234 5678')?.name, 'Nimali');
+      expect(hiveService.getCustomerByPhone('(071) 234-5678')?.name, 'Nimali');
     });
 
     test('getCustomerByPhone should return null for non-existent phone',
@@ -350,6 +633,59 @@ void main() {
       expect(service.id, equals(key));
     });
 
+    test('insertService should persist id across a cold box reload', () async {
+      const colorValue = 0xFF1565C0;
+      final service = TestHiveHelpers.createService(
+        title: 'Restart-safe',
+        colorValue: colorValue,
+      );
+
+      final key = await hiveService.insertService(service);
+      final snapshot = await _openServiceBoxSnapshot();
+
+      try {
+        expect(snapshot.get(key)?.id, equals(key));
+        expect(snapshot.get(key)?.colorValue, equals(colorValue));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('backfillServiceIds repairs only services with missing ids', () async {
+      final box = Hive.box<Service>(HiveService.servicesBox);
+      final missingIdService =
+          TestHiveHelpers.createService(title: 'Missing id')..id = null;
+      final validService = TestHiveHelpers.createService(title: 'Valid id')
+        ..id = 999;
+      final missingIdKey = await box.add(missingIdService);
+      final validKey = await box.add(validService);
+
+      await hiveService.backfillServiceIds();
+      await hiveService.backfillServiceIds();
+
+      expect(box.get(missingIdKey)?.id, equals(missingIdKey));
+      expect(box.get(validKey)?.id, equals(999));
+
+      final snapshot = await _openServiceBoxSnapshot();
+      try {
+        expect(snapshot.get(missingIdKey)?.id, equals(missingIdKey));
+        expect(snapshot.get(validKey)?.id, equals(999));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('watchAllServices repairs ids before its initial emission', () async {
+      final box = Hive.box<Service>(HiveService.servicesBox);
+      final key = await box.add(
+        TestHiveHelpers.createService(title: 'Legacy route target')..id = null,
+      );
+
+      final initialServices = await hiveService.watchAllServices().first;
+
+      expect(initialServices.single.id, equals(key));
+    });
+
     test('getAllServices should return all services', () async {
       await hiveService
           .insertService(TestHiveHelpers.createService(title: 'Service A'));
@@ -362,12 +698,17 @@ void main() {
     });
 
     test('getServiceById should return service by id', () async {
-      final service = TestHiveHelpers.createService(title: 'Haircut');
+      const colorValue = 0xFF1565C0;
+      final service = TestHiveHelpers.createService(
+        title: 'Haircut',
+        colorValue: colorValue,
+      );
 
       final key = await hiveService.insertService(service);
       final found = hiveService.getServiceById(key!);
 
       expect(found?.title, equals('Haircut'));
+      expect(found?.colorValue, equals(colorValue));
     });
 
     test('updateService should update service', () async {
@@ -389,6 +730,55 @@ void main() {
 
       final deleted = hiveService.getServiceById(key);
       expect(deleted, isNull);
+    });
+  });
+
+  group('HiveService Service Station CRUD', () {
+    ServiceStation station({String name = 'Main Room'}) => ServiceStation()
+      ..name = name
+      ..createdAt = DateTime(2026, 9, 15)
+      ..updatedAt = DateTime(2026, 9, 15)
+      ..synced = false;
+
+    test('insertServiceStation persists id across a cold box reload', () async {
+      final serviceStation = station();
+
+      final key = await hiveService.insertServiceStation(serviceStation);
+      final snapshot = await _openServiceStationBoxSnapshot();
+
+      try {
+        expect(snapshot.get(key)?.id, equals(key));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('backfillServiceStationIds repairs historical missing ids', () async {
+      final box = Hive.box<ServiceStation>(HiveService.serviceStationsBox);
+      final missingIdKey =
+          await box.add(station(name: 'Legacy Room')..id = null);
+
+      await hiveService.backfillServiceStationIds();
+      await hiveService.backfillServiceStationIds();
+
+      expect(box.get(missingIdKey)?.id, equals(missingIdKey));
+      final snapshot = await _openServiceStationBoxSnapshot();
+      try {
+        expect(snapshot.get(missingIdKey)?.id, equals(missingIdKey));
+      } finally {
+        await snapshot.deleteFromDisk();
+      }
+    });
+
+    test('watchAllServiceStations repairs ids before Booking receives them',
+        () async {
+      final box = Hive.box<ServiceStation>(HiveService.serviceStationsBox);
+      final key =
+          await box.add(station(name: 'Legacy Booking Room')..id = null);
+
+      final initialStations = await hiveService.watchAllServiceStations().first;
+
+      expect(initialStations.single.id, equals(key));
     });
   });
 

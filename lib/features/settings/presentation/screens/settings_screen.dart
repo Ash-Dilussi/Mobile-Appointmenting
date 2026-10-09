@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/config/release_scope.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/theme/service_color_palette.dart';
 import '../../../../core/database/collections/collections.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../auth/presentation/providers/auth_session_provider.dart';
-import '../../../../core/auth/rbac.dart';
 import '../../../../core/providers/auth_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -21,25 +22,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool _hasNoCompany = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkCompanyStatus();
-    });
-  }
-
-  void _checkCompanyStatus() {
-    final session = ref.read(authSessionProvider);
-    setState(() {
-      _hasNoCompany =
-          session?.institutionId == null && session?.role == Role.owner;
-    });
-  }
-
   Future<void> _handleSignOut() async {
+    final colors = Theme.of(context).colorScheme;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -52,7 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(foregroundColor: colors.error),
             child: const Text('Sign Out'),
           ),
         ],
@@ -67,7 +51,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final session = ref.watch(authSessionProvider);
+    final hasNoBusiness = session != null && !session.hasInstitution;
 
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
       if (next.status == AuthStatus.unauthenticated) {
@@ -76,7 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         title: const Text('Settings'),
         centerTitle: true,
@@ -90,7 +76,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'Account',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -114,6 +100,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     context.goNamed('change-password');
                   },
                 ),
+                _SettingsTile(
+                  icon: Icons.delete_forever_outlined,
+                  title: 'Delete account',
+                  subtitle: 'Permanently delete your Bookly account',
+                  destructive: true,
+                  onTap: () => context.pushNamed('delete-account'),
+                ),
               ],
             ),
 
@@ -123,20 +116,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'App Preferences',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             _SettingsCard(
               children: [
-                _SettingsTile(
-                  icon: Icons.notifications_outlined,
-                  title: 'Notifications',
-                  subtitle: 'Manage notification settings',
-                  onTap: () {
-                    // TODO: Navigate to notifications
-                  },
-                ),
+                if (ReleaseScope.developmentOnlyDestinationsEnabled)
+                  _SettingsTile(
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    subtitle: 'Manage notification settings',
+                    onTap: () => _openComingSoon(context, 'Notifications'),
+                  ),
                 _SettingsTile(
                   icon: Icons.palette_outlined,
                   title: 'Appearance',
@@ -146,63 +138,66 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+            if (ReleaseScope.googleCalendarSyncEnabled) ...[
+              const SizedBox(height: AppSpacing.xl),
 
-            // Calendar Integration Section
-            Text(
-              'Calendar Integration',
-              style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+              // Calendar Integration Section
+              Text(
+                'Calendar Integration',
+                style: AppTypography.titleSmall.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SettingsCard(
-              children: [
-                Consumer(builder: (context, ref, _) {
-                  final authService = ref.watch(googleAuthServiceProvider);
-                  final isSignedIn = authService.isSignedIn;
-                  return _SettingsTile(
-                    icon: Icons.calendar_month_rounded,
-                    title: 'Google Calendar',
-                    subtitle: isSignedIn
-                        ? '${authService.currentUser?.email}'
-                        : 'Sign in to sync appointments',
-                    onTap: () async {
-                      if (isSignedIn) {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Sign Out'),
-                            content: const Text(
-                                'Are you sure you want to sign out from Google Calendar?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Sign Out'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed == true) {
-                          await authService.signOut();
-                        }
-                      } else {
-                        final account = await authService.signIn();
-                        if (account == null && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Sign in cancelled')),
+              const SizedBox(height: AppSpacing.md),
+              _SettingsCard(
+                children: [
+                  Consumer(builder: (context, ref, _) {
+                    final authService = ref.watch(googleAuthServiceProvider);
+                    final isSignedIn = authService.isSignedIn;
+                    return _SettingsTile(
+                      icon: Icons.calendar_month_rounded,
+                      title: 'Google Calendar',
+                      subtitle: isSignedIn
+                          ? '${authService.currentUser?.email}'
+                          : 'Sign in to sync appointments',
+                      onTap: () async {
+                        if (isSignedIn) {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Sign Out'),
+                              content: const Text(
+                                  'Are you sure you want to sign out from Google Calendar?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Sign Out'),
+                                ),
+                              ],
+                            ),
                           );
+                          if (confirmed == true) {
+                            await authService.signOut();
+                          }
+                        } else {
+                          final account = await authService.signIn();
+                          if (account == null && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Sign in cancelled')),
+                            );
+                          }
                         }
-                      }
-                    },
-                  );
-                }),
-              ],
-            ),
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ],
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -210,19 +205,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'Business Management',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             _SettingsCard(
               children: [
-                if (_hasNoCompany) ...[
+                _SettingsTile(
+                  icon: Icons.insights_outlined,
+                  title: 'Insights',
+                  subtitle: 'View business performance',
+                  onTap: () {
+                    context.goNamed('insights');
+                  },
+                ),
+                if (hasNoBusiness) ...[
                   _SettingsTile(
                     icon: Icons.business,
-                    title: 'Create Company',
-                    subtitle: 'Set up your company to get started',
+                    title: 'Set Up Business',
+                    subtitle: 'Choose solo or team setup to get started',
                     onTap: () {
-                      context.goNamed('create-company');
+                      context.goNamed('business-setup');
                     },
                   ),
                 ] else ...[
@@ -236,20 +239,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   _SettingsTile(
                     icon: Icons.location_city_outlined,
-                    title: 'Manage Stations',
-                    subtitle: 'Add, edit, or remove service stations',
+                    title: 'Service Locations',
+                    subtitle: 'Add, edit, or remove service locations',
                     onTap: () {
                       context.goNamed('station-management');
                     },
                   ),
-                  _SettingsTile(
-                    icon: Icons.people_outline,
-                    title: 'Staff Management',
-                    subtitle: 'Manage staff members',
-                    onTap: () {
-                      context.goNamed('staff-management');
-                    },
-                  ),
+                  if (session?.isOwner == true)
+                    _SettingsTile(
+                      icon: Icons.people_outline,
+                      title: 'Staff Management',
+                      subtitle: 'Manage staff members',
+                      onTap: () {
+                        context.goNamed('staff-management');
+                      },
+                    ),
                 ],
               ],
             ),
@@ -260,27 +264,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'Help & Support',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             _SettingsCard(
               children: [
-                _SettingsTile(
-                  icon: Icons.help_outline,
-                  title: 'Help Center',
-                  subtitle: 'FAQs and guides',
-                  onTap: () {
-                    // TODO: Navigate to help
-                  },
-                ),
+                if (ReleaseScope.developmentOnlyDestinationsEnabled)
+                  _SettingsTile(
+                    icon: Icons.help_outline,
+                    title: 'Help Center',
+                    subtitle: 'FAQs and guides',
+                    onTap: () => _openComingSoon(context, 'Help Center'),
+                  ),
                 _SettingsTile(
                   icon: Icons.support_agent_outlined,
                   title: 'Contact Support',
-                  subtitle: 'Get help from our team',
-                  onTap: () {
-                    // TODO: Navigate to contact support
-                  },
+                  subtitle: 'Email bookly.support@gmail.com',
+                  onTap: () => _contactSupport(context),
                 ),
               ],
             ),
@@ -291,44 +292,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'Tips & Hints',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             _SettingsCard(
               children: [
-                _HintTile(
+                const _HintTile(
                   hint:
                       'When a call comes in, tap "Book Now" to quickly schedule an appointment',
                 ),
-                const Divider(
+                Divider(
                     height: 1,
                     indent: AppSpacing.xxl,
-                    color: AppColors.outline),
-                _HintTile(
+                    color: colors.outlineVariant),
+                const _HintTile(
                   hint:
                       'Use the calendar view to see your entire schedule at a glance',
                 ),
-                const Divider(
+                Divider(
                     height: 1,
                     indent: AppSpacing.xxl,
-                    color: AppColors.outline),
-                _HintTile(
+                    color: colors.outlineVariant),
+                const _HintTile(
                   hint: 'Search for existing customers by name or phone number',
                 ),
-                const Divider(
+                Divider(
                     height: 1,
                     indent: AppSpacing.xxl,
-                    color: AppColors.outline),
-                _HintTile(
-                  hint:
-                      'Missed calls are tracked automatically - follow up with one tap',
+                    color: colors.outlineVariant),
+                const _HintTile(
+                  hint: 'Calls started from Bookly appear in Call History',
                 ),
-                const Divider(
+                Divider(
                     height: 1,
                     indent: AppSpacing.xxl,
-                    color: AppColors.outline),
-                _HintTile(
+                    color: colors.outlineVariant),
+                const _HintTile(
                   hint:
                       'Your data is stored locally and works even without internet',
                 ),
@@ -341,7 +341,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(
               'About',
               style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+                color: colors.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -355,45 +355,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _showAboutDialog(context);
                   },
                 ),
-                _SettingsTile(
-                  icon: Icons.description_outlined,
-                  title: 'Terms of Service',
-                  onTap: () {
-                    // TODO: Navigate to terms
-                  },
-                ),
-                _SettingsTile(
-                  icon: Icons.privacy_tip_outlined,
-                  title: 'Privacy Policy',
-                  onTap: () {
-                    // TODO: Navigate to privacy policy
-                  },
-                ),
+                if (ReleaseScope.developmentOnlyDestinationsEnabled) ...[
+                  _SettingsTile(
+                    icon: Icons.description_outlined,
+                    title: 'Terms of Service',
+                    onTap: () => _openComingSoon(context, 'Terms of Service'),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Privacy Policy',
+                    onTap: () => _openComingSoon(context, 'Privacy Policy'),
+                  ),
+                ],
               ],
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+            if (ReleaseScope.developmentOnlyDestinationsEnabled) ...[
+              const SizedBox(height: AppSpacing.xl),
 
-            // Developer Tools Section
-            Text(
-              'Developer Tools',
-              style: AppTypography.titleSmall.copyWith(
-                color: AppColors.secondary,
+              // Destructive sample data tooling is never shown in release.
+              Text(
+                'Developer Tools',
+                style: AppTypography.titleSmall.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SettingsCard(
-              children: [
-                _SettingsTile(
-                  icon: Icons.bug_report_outlined,
-                  title: 'Load Sample Data',
-                  subtitle: 'Seed database with test data',
-                  onTap: () async {
-                    await _seedSampleData(context);
-                  },
-                ),
-              ],
-            ),
+              const SizedBox(height: AppSpacing.md),
+              _SettingsCard(
+                children: [
+                  _SettingsTile(
+                    icon: Icons.bug_report_outlined,
+                    title: 'Load Sample Data',
+                    subtitle: 'Seed database with test data',
+                    onTap: () async {
+                      await _seedSampleData(context);
+                    },
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -402,15 +402,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () => _handleSignOut(),
-                icon: const Icon(Icons.logout, color: AppColors.error),
+                icon: Icon(Icons.logout, color: colors.error),
                 label: Text(
                   'Sign Out',
                   style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.error,
+                    color: colors.error,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.error),
+                  side: BorderSide(color: colors.error),
                 ),
               ),
             ),
@@ -422,6 +422,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _openComingSoon(BuildContext context, String featureName) {
+    context.pushNamed(
+      'coming-soon',
+      queryParameters: {'feature': featureName},
+    );
+  }
+
+  Future<void> _contactSupport(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'bookly.support@gmail.com',
+      queryParameters: const {'subject': 'Bookly support request'},
+    );
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No email app is available on this device.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open an email app.'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _seedSampleData(BuildContext context) async {
     showDialog(
       context: context,
@@ -431,6 +465,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     try {
       // Ensure adapters are registered
+      if (!Hive.isAdapterRegistered(13)) {
+        Hive.registerAdapter(CustomerNoteAdapter());
+      }
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(CustomerAdapter());
         Hive.registerAdapter(ServiceAdapter());
@@ -450,6 +487,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await callLogBox.clear();
 
       final now = DateTime.now();
+      CustomerNote customerNote(String id, String title) => CustomerNote(
+            id: id,
+            title: title,
+            createdAt: now,
+            updatedAt: now,
+          );
 
       // Verify box is ready
       final testCustomer = Customer()
@@ -473,7 +516,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..phoneNumber = '+1234567890'
           ..name = 'Alice Johnson'
           ..email = 'alice@email.com'
-          ..notes = 'Morning person'
+          ..notes = [customerNote('sample-note-1', 'Morning person')]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -482,7 +525,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..phoneNumber = '+1987654321'
           ..name = 'Bob Smith'
           ..email = 'bob@email.com'
-          ..notes = 'Regular client'
+          ..notes = [customerNote('sample-note-2', 'Regular client')]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -491,7 +534,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..phoneNumber = '+1555123456'
           ..name = 'Carol Davis'
           ..email = 'carol@email.com'
-          ..notes = 'New customer'
+          ..notes = [customerNote('sample-note-3', 'New customer')]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -500,7 +543,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..phoneNumber = '+1415555678'
           ..name = 'David Wilson'
           ..email = 'david@email.com'
-          ..notes = 'Afternoon'
+          ..notes = [customerNote('sample-note-4', 'Afternoon')]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -509,7 +552,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..phoneNumber = '+1617555123'
           ..name = 'Emma Brown'
           ..email = 'emma@email.com'
-          ..notes = 'VIP'
+          ..notes = [customerNote('sample-note-5', 'VIP')]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -523,6 +566,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Service()
           ..id = 1
           ..title = 'Haircut'
+          ..colorValue = ServiceColorPalette.options[5].argbValue
           ..defaultDurationMinutes = 30
           ..cost = 50.0
           ..description = 'Standard haircut'
@@ -532,6 +576,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Service()
           ..id = 2
           ..title = 'Hair Coloring'
+          ..colorValue = ServiceColorPalette.options[0].argbValue
           ..defaultDurationMinutes = 90
           ..cost = 150.0
           ..description = 'Full coloring'
@@ -541,6 +586,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Service()
           ..id = 3
           ..title = 'Massage'
+          ..colorValue = ServiceColorPalette.options[7].argbValue
           ..defaultDurationMinutes = 60
           ..cost = 80.0
           ..description = 'Relaxing massage'
@@ -550,6 +596,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Service()
           ..id = 4
           ..title = 'Manicure'
+          ..colorValue = ServiceColorPalette.options[8].argbValue
           ..defaultDurationMinutes = 45
           ..cost = 40.0
           ..description = 'Nail care'
@@ -559,6 +606,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Service()
           ..id = 5
           ..title = 'Consultation'
+          ..colorValue = ServiceColorPalette.options[4].argbValue
           ..defaultDurationMinutes = 15
           ..cost = 0.0
           ..description = 'Free consultation'
@@ -580,7 +628,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(0, 9, 30)
           ..status = 'confirmed'
           ..staffId = 1
-          ..notes = ''
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -592,7 +639,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(0, 11, 0)
           ..status = 'upcoming'
           ..staffId = 1
-          ..notes = ''
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -604,7 +650,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(1, 15, 30)
           ..status = 'upcoming'
           ..staffId = 1
-          ..notes = ''
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -616,7 +661,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(2, 11, 45)
           ..status = 'ongoing'
           ..staffId = 1
-          ..notes = ''
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -628,7 +672,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(-1, 15, 30)
           ..status = 'done'
           ..staffId = 1
-          ..notes = ''
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -640,7 +683,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ..endTime = _makeDate(3, 10, 30)
           ..status = 'upcoming'
           ..staffId = 1
-          ..notes = 'Follow-up massage'
+          ..notes = [
+            AppointmentNote(
+              id: 'sample-appointment-note-1',
+              title: 'Follow-up',
+              description: 'Follow-up massage',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          ]
           ..createdAt = now
           ..updatedAt = now
           ..synced = false,
@@ -811,6 +862,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showAboutDialog(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -825,12 +877,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryContainer,
+                  color: colors.primaryContainer,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.app_settings_alt,
-                  color: AppColors.onPrimaryContainer,
+                  color: colors.onPrimaryContainer,
                   size: 48,
                 ),
               ),
@@ -856,7 +908,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Text(
                 'Ash_Dilussi',
                 style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.primary,
+                  color: colors.primary,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -871,7 +923,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Text(
                   'Close',
                   style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.primary,
+                    color: colors.primary,
                   ),
                 ),
               ),
@@ -890,9 +942,10 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: colors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       ),
       child: Column(
@@ -903,7 +956,7 @@ class _SettingsCard extends StatelessWidget {
               Divider(
                 height: 1,
                 indent: AppSpacing.xxl,
-                color: AppColors.outline.withOpacity(0.1),
+                color: colors.outlineVariant,
               ),
           ],
         ],
@@ -917,16 +970,23 @@ class _SettingsTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
+  final bool destructive;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
     this.subtitle,
     required this.onTap,
+    this.destructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final iconBackground =
+        destructive ? colors.errorContainer : colors.primaryContainer;
+    final iconForeground =
+        destructive ? colors.onErrorContainer : colors.onPrimaryContainer;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -937,17 +997,22 @@ class _SettingsTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: AppColors.primaryContainer.withOpacity(0.3),
+                color: iconBackground,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               ),
-              child: Icon(icon, color: AppColors.primary, size: 20),
+              child: Icon(icon, color: iconForeground, size: 20),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppTypography.bodyLarge),
+                  Text(
+                    title,
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: destructive ? colors.error : colors.onSurface,
+                    ),
+                  ),
                   if (subtitle != null) ...[
                     const SizedBox(height: 2),
                     Text(
@@ -958,9 +1023,9 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right,
-              color: AppColors.secondary,
+              color: colors.onSurfaceVariant,
             ),
           ],
         ),
@@ -986,6 +1051,7 @@ class _ThemeOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -999,11 +1065,11 @@ class _ThemeOptionTile extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primaryContainer.withOpacity(0.3)
-                    : AppColors.surfaceContainerHigh,
+                    ? colors.primaryContainer
+                    : colors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               ),
-              child: Icon(icon, color: AppColors.primary, size: 20),
+              child: Icon(icon, color: colors.primary, size: 20),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -1015,14 +1081,13 @@ class _ThemeOptionTile extends StatelessWidget {
                   Text(
                     subtitle,
                     style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.secondary,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              Icon(Icons.check, color: AppColors.primary, size: 20),
+            if (isSelected) Icon(Icons.check, color: colors.primary, size: 20),
           ],
         ),
       ),
@@ -1037,6 +1102,7 @@ class _HintTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
@@ -1044,9 +1110,9 @@ class _HintTile extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(AppSpacing.xs),
-            child: const Icon(
+            child: Icon(
               Icons.lightbulb_outline,
-              color: AppColors.primaryContainer,
+              color: colors.primary,
               size: 20,
             ),
           ),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../../core/providers/app_init_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/app_launch_provider.dart';
-import '../../../../core/providers/app_init_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -16,6 +17,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _logoController;
   late final Animation<double> _logoOpacity;
+  bool _navigationScheduled = false;
+  bool _errorScheduled = false;
 
   @override
   void initState() {
@@ -38,21 +41,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Watch appInitProvider — navigates once initialization completes
-    ref.listen<AsyncValue<bool>>(appInitProvider, (_, next) {
-      next.whenOrNull(
-        data: (_) {
-          // Init done — now check auth state and navigate
-          final authState = ref.read(appLaunchProvider);
-          context.go('/entrance', extra: authState);
-        },
-        error: (e, st) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Startup failed: $e')),
-          );
-        },
-      );
-    });
+    // Treat initialization completion as durable state. A transition-only
+    // listener can miss a result that resolves before this screen subscribes.
+    final appInit = ref.watch(appInitProvider);
+    appInit.whenOrNull(
+      data: (_) => _scheduleNavigation(),
+      error: (error, _) => _scheduleError(error),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.primary,
@@ -75,5 +70,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         ),
       ),
     );
+  }
+
+  void _scheduleNavigation() {
+    if (_navigationScheduled) return;
+    _navigationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final authState = ref.read(appLaunchProvider);
+      context.go('/entrance', extra: authState);
+    });
+  }
+
+  void _scheduleError(Object error) {
+    if (_errorScheduled) return;
+    _errorScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Startup failed: $error')),
+      );
+    });
   }
 }

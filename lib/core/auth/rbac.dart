@@ -1,7 +1,7 @@
 /// Role-Based Access Control for multi-tenant app.
 /// Defines user roles and their permissions within an institution.
 enum Role {
-  owner('Owner', 'Full administrative access to the institution'),
+  owner('Owner', 'Full administrative access to the business'),
   officer('Officer', 'Operational access for day-to-day tasks');
 
   final String displayName;

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/config/release_scope.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/auth/rbac.dart';
@@ -19,22 +19,26 @@ class StationManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final db = ref.watch(homeHiveProvider);
     final authSession = ref.watch(authSessionProvider);
     final isOwner = authSession?.role == Role.owner;
+    final institutionId = authSession?.institutionId;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colors.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.goNamed('settings'),
         ),
-        title: const Text('Manage Stations'),
+        title: const Text('Service Locations'),
         centerTitle: true,
       ),
       body: StreamBuilder<List<ServiceStation>>(
-        stream: db.watchAllServiceStations(),
+        stream: institutionId == null
+            ? Stream.value(const <ServiceStation>[])
+            : db.watchStationsForInstitution(institutionId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -50,22 +54,33 @@ class StationManagementScreen extends ConsumerWidget {
                   Icon(
                     Icons.location_city_outlined,
                     size: 64,
-                    color: AppColors.secondary.withValues(alpha: 0.5),
+                    color: colors.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'No stations yet',
+                    'No service locations yet',
                     style: AppTypography.bodyLarge.copyWith(
-                      color: AppColors.secondary,
+                      color: colors.onSurface,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     isOwner
-                        ? 'Add your first service station to get started'
-                        : 'No stations available',
-                    style: AppTypography.bodySmall,
+                        ? 'Add your first location to get started'
+                        : 'No service locations available',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
+                  if (isOwner) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    FilledButton.icon(
+                      key: const ValueKey('add-service-location-empty'),
+                      onPressed: () => context.goNamed('add-station'),
+                      icon: const Icon(Icons.add_location_alt_outlined),
+                      label: const Text('Add Location'),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -75,16 +90,22 @@ class StationManagementScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: stations.length,
             itemBuilder: (context, index) {
+              final stationCard = _StationCard(
+                station: stations[index],
+                isOwner: isOwner,
+              );
+
+              if (!isOwner) {
+                return stationCard;
+              }
+
               return SwipeToDeleteWrapper(
                 entityName: 'Station',
                 onDelete: () async {
                   final db = ref.read(homeHiveProvider);
                   await db.deleteServiceStation(stations[index].id!);
                 },
-                child: _StationCard(
-                  station: stations[index],
-                  isOwner: isOwner,
-                ),
+                child: stationCard,
               );
             },
           );
@@ -92,9 +113,10 @@ class StationManagementScreen extends ConsumerWidget {
       ),
       floatingActionButton: isOwner
           ? FloatingActionButton.extended(
+              key: const ValueKey('add-service-location-fab'),
               onPressed: () => context.goNamed('add-station'),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Station'),
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Add Location'),
             )
           : null,
     );
@@ -112,6 +134,8 @@ class _StationCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
+
     return PebbleContextMenuWrapper(
       title: station.name,
       actions: [
@@ -127,7 +151,9 @@ class _StationCard extends ConsumerWidget {
             },
           ),
         ],
-        if (station.address != null && station.address!.isNotEmpty)
+        if (ReleaseScope.developmentOnlyDestinationsEnabled &&
+            station.address != null &&
+            station.address!.isNotEmpty)
           PebbleContextAction(
             icon: Icons.map,
             label: 'View on Map',
@@ -142,7 +168,7 @@ class _StationCard extends ConsumerWidget {
         if (isOwner)
           PebbleContextAction(
             icon: Icons.delete,
-            iconColor: AppColors.error,
+            iconColor: colors.error,
             label: 'Delete',
             onTap: () => _showDeleteDialog(context, ref),
           ),
@@ -151,7 +177,7 @@ class _StationCard extends ConsumerWidget {
         margin: const EdgeInsets.only(bottom: AppSpacing.md),
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: colors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         ),
         child: Row(
@@ -164,14 +190,15 @@ class _StationCard extends ConsumerWidget {
                     station.name,
                     style: AppTypography.titleMedium,
                   ),
-                  if (station.address != null && station.address!.isNotEmpty) ...[
+                  if (station.address != null &&
+                      station.address!.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         Icon(
                           Icons.location_on,
                           size: 16,
-                          color: AppColors.secondary,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
@@ -192,7 +219,7 @@ class _StationCard extends ConsumerWidget {
                         Icon(
                           Icons.phone,
                           size: 16,
-                          color: AppColors.secondary,
+                          color: colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -230,9 +257,9 @@ class _StationCard extends ConsumerWidget {
   }
 
   void _handleViewOnMap(BuildContext context) {
-    // TODO: Implement map view using url_launcher with geo: URI
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Map view coming soon')),
+    context.pushNamed(
+      'coming-soon',
+      queryParameters: const {'feature': 'Map View'},
     );
   }
 
@@ -264,7 +291,8 @@ class _StationCard extends ConsumerWidget {
               _handleDelete(context, ref);
             },
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             child: const Text('Delete'),
           ),

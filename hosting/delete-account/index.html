@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Delete your Bookly account</title>
+    <meta name="description" content="Request deletion of a Bookly account and its associated data.">
+    <link rel="stylesheet" href="/delete-account/styles.css">
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">BOOKLY ACCOUNT CONTROL</p>
+      <h1>Delete your Bookly account</h1>
+      <p>
+        Enter the email address used for your Bookly account. We will send a
+        time-limited verification link to that address. Nothing is deleted
+        until you open the link and confirm control of the account email.
+      </p>
+
+      <form id="request-form">
+        <label for="email">Bookly account email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+        <button id="submit-button" type="submit">Email verification link</button>
+      </form>
+
+      <section id="status" class="status" aria-live="polite" hidden></section>
+
+      <section class="details">
+        <h2>What happens</h2>
+        <ul>
+          <li>Your account identity and membership profile are deleted.</li>
+          <li>A sole owner must delete the business in the app or keep the account.</li>
+          <li>Business deletion immediately removes its memberships and server data.</li>
+          <li>Offline device copies are erased at their next launch or authentication check.</li>
+        </ul>
+        <p>
+          Requests are completed as soon as verification succeeds and always
+          within a disclosed maximum of 30 days. For a manually assisted owner
+          transfer or deletion help, email
+          <a href="mailto:bookly.support@gmail.com">bookly.support@gmail.com</a>.
+        </p>
+      </section>
+    </main>
+
+    <script src="/__/firebase/8.10.1/firebase-app.js"></script>
+    <script src="/__/firebase/8.10.1/firebase-auth.js"></script>
+    <script src="/__/firebase/8.10.1/firebase-functions.js"></script>
+    <script src="/__/firebase/init.js"></script>
+    <script src="/delete-account/app.js"></script>
+  </body>
+</html>

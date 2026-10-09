@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/app_badge.dart';
 import '../../data/models/call_log_entry.dart';
-import '../../providers/call_log_providers.dart';
 import 'contact_suite_view.dart';
 
 class CallLogListTile extends ConsumerWidget {
@@ -82,22 +82,23 @@ class CallLogListTile extends ConsumerWidget {
 class _SwipeBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.only(right: AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.error,
+        color: colors.error,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.call, color: Colors.white),
-          SizedBox(width: AppSpacing.xs),
+          Icon(Icons.call, color: colors.onError),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             'Call',
             style: TextStyle(
-              color: Colors.white,
+              color: colors.onError,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -127,25 +128,24 @@ class _CallLogTileContent extends StatelessWidget {
 
     // Determine call type icon and color
     IconData icon;
-    Color iconColor;
-    String statusText;
+    late AppBadgePresentation callStatus;
 
     switch (entry.callType.toLowerCase()) {
       case 'incoming':
         icon = Icons.call_received;
-        iconColor = AppColors.success;
-        statusText = 'Incoming';
+        callStatus =
+            callStatusPresentation('incoming', Theme.of(context).colorScheme);
         break;
       case 'outgoing':
         icon = Icons.call_made;
-        iconColor = AppColors.primary;
-        statusText = 'Outgoing';
+        callStatus =
+            callStatusPresentation('outgoing', Theme.of(context).colorScheme);
         break;
       case 'missed':
       default:
         icon = Icons.call_missed;
-        iconColor = AppColors.error;
-        statusText = 'Missed';
+        callStatus =
+            callStatusPresentation('missed', Theme.of(context).colorScheme);
     }
 
     // Format duration
@@ -176,10 +176,14 @@ class _CallLogTileContent extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
+                color: callStatus.backgroundColor,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               ),
-              child: Icon(icon, color: iconColor, size: 24),
+              child: Icon(
+                icon,
+                color: callStatus.foregroundColor,
+                size: 24,
+              ),
             ),
 
             const SizedBox(width: AppSpacing.md),
@@ -202,7 +206,16 @@ class _CallLogTileContent extends StatelessWidget {
                         ),
                       ),
                       // Live indicator for ongoing calls
-                      if (entry.state == 'ongoing') _LiveIndicator(),
+                      if (entry.state == 'ongoing')
+                        AppBadge(
+                          presentation: callStatusPresentation(
+                            'live',
+                            Theme.of(context).colorScheme,
+                          ),
+                          compact: true,
+                          showDot: true,
+                          pulse: true,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -230,8 +243,11 @@ class _CallLogTileContent extends StatelessWidget {
                       : durationText,
                   style: AppTypography.bodyMedium.copyWith(
                     color: entry.state == 'missed'
-                        ? AppColors.error
-                        : AppColors.secondary,
+                        ? callStatusPresentation(
+                            'missed',
+                            Theme.of(context).colorScheme,
+                          ).foregroundColor
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -246,75 +262,6 @@ class _CallLogTileContent extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _LiveIndicator extends StatefulWidget {
-  @override
-  State<_LiveIndicator> createState() => _LiveIndicatorState();
-}
-
-class _LiveIndicatorState extends State<_LiveIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          margin: const EdgeInsets.only(left: AppSpacing.xs),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.xs,
-            vertical: 2,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.success.withValues(alpha: _animation.value * 0.2),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: _animation.value),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Live',
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.success,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

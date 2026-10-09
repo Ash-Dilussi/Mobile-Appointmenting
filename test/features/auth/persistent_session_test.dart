@@ -9,6 +9,7 @@ import 'package:bookly/features/auth/domain/repositories/auth_repository.dart';
 import 'package:bookly/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:bookly/core/hive/hive_initializer.dart';
 import 'package:bookly/features/auth/presentation/providers/auth_session_provider.dart';
+import 'package:bookly/core/database/hive_service.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
@@ -17,6 +18,8 @@ class MockRef extends Mock implements Ref {}
 class MockAuthSessionNotifier extends Mock implements AuthSessionNotifier {}
 
 class FakeAuthUser extends Fake implements AuthUser {}
+
+class MockHiveService extends Mock implements HiveService {}
 
 void main() {
   group('Persistent Session Tests', () {
@@ -65,7 +68,8 @@ void main() {
     });
 
     // C1: User remains logged in after app restart (Hive cache hit)
-    test('C1: user remains logged in after app restart (Hive cache hit)', () async {
+    test('C1: user remains logged in after app restart (Hive cache hit)',
+        () async {
       final cachedUser = AuthUser(
         uid: 'uid_owner_001',
         email: 'owner@test.com',
@@ -85,7 +89,8 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(notifier.state.status, AuthStatus.authenticated);
-      verifyNever(() => mockRepository.signInWithEmail(email: any(named: 'email'), password: any(named: 'password')));
+      verifyNever(() => mockRepository.signInWithEmail(
+          email: any(named: 'email'), password: any(named: 'password')));
     });
 
     // C2: Cleared app cache forces re-login
@@ -213,19 +218,41 @@ void main() {
     test('isLoading returns true for initial and loading states', () {
       expect(AuthState.initial().isLoading, isTrue);
       expect(AuthState.loading().isLoading, isTrue);
-      expect(AuthState.authenticated(AuthUser(
-        uid: '1',
-        email: 'a@a.com',
-        displayName: 'A',
-        role: UserRole.owner,
-        institutionId: 'i1',
-        isEmailVerified: true,
-        createdAt: DateTime.now(),
-      )).isLoading, isFalse);
+      expect(
+          AuthState.authenticated(AuthUser(
+            uid: '1',
+            email: 'a@a.com',
+            displayName: 'A',
+            role: UserRole.owner,
+            institutionId: 'i1',
+            isEmailVerified: true,
+            createdAt: DateTime.now(),
+          )).isLoading,
+          isFalse);
     });
   });
 
   group('AuthUser Tests', () {
+    test('unknown auth role remains unassigned in the app session', () async {
+      final notifier = AuthSessionNotifier(MockHiveService());
+      await notifier.loadSessionFromAuthUser(
+        AuthUser(
+          uid: 'unassigned-1',
+          email: 'new@bookly.test',
+          displayName: 'New Owner',
+          role: UserRole.unknown,
+          institutionId: '',
+          isEmailVerified: true,
+          createdAt: DateTime(2026),
+        ),
+      );
+
+      expect(notifier.state?.role, isNull);
+      expect(notifier.state?.isOwner, isFalse);
+      expect(notifier.state?.isOfficer, isFalse);
+      expect(notifier.state?.hasInstitution, isFalse);
+    });
+
     test('AuthUser equality by uid', () {
       final user1 = AuthUser(
         uid: 'uid_001',
@@ -317,7 +344,8 @@ void main() {
         isEmailVerified: true,
         createdAt: DateTime.now(),
       );
-      final updated = original.copyWith(displayName: 'Updated Name', institutionId: 'inst_002');
+      final updated = original.copyWith(
+          displayName: 'Updated Name', institutionId: 'inst_002');
       expect(updated.uid, '1');
       expect(updated.email, 'a@a.com');
       expect(updated.displayName, 'Updated Name');

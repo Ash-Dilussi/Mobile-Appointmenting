@@ -23,7 +23,7 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..startTime = fields[3] as DateTime
       ..endTime = fields[4] as DateTime
       ..status = fields[5] as String
-      ..notes = fields[6] as String?
+      ..legacyNotes = fields[6] as String?
       ..staffId = fields[7] as int?
       ..stationId = fields[8] as int?
       ..createdAt = fields[9] as DateTime
@@ -32,13 +32,16 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..institutionId = fields[12] as String?
       ..handledByUserId = fields[13] as String?
       ..googleEventId = fields[14] as String?
-      ..syncWithGoogle = fields[15] as bool;
+      ..syncWithGoogle = fields[15] == null ? false : fields[15] as bool
+      ..notes = fields[16] == null
+          ? []
+          : (fields[16] as List).cast<AppointmentNote>();
   }
 
   @override
   void write(BinaryWriter writer, Appointment obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -52,7 +55,7 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..writeByte(5)
       ..write(obj.status)
       ..writeByte(6)
-      ..write(obj.notes)
+      ..write(obj.legacyNotes)
       ..writeByte(7)
       ..write(obj.staffId)
       ..writeByte(8)
@@ -70,7 +73,9 @@ class AppointmentAdapter extends TypeAdapter<Appointment> {
       ..writeByte(14)
       ..write(obj.googleEventId)
       ..writeByte(15)
-      ..write(obj.syncWithGoogle);
+      ..write(obj.syncWithGoogle)
+      ..writeByte(16)
+      ..write(obj.notes);
   }
 
   @override

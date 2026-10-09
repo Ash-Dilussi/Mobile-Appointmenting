@@ -1,14 +1,14 @@
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/firebase/firebase_options.dart';
 import '../../core/database/hive_service.dart';
 import '../../core/hive/hive_initializer.dart';
 import '../../core/logging/logger_service.dart';
 import '../../seed_dummy_data.dart';
 
 // New imports for entitlements step
-import '../../features/subscription/data/subscription_repository.dart';
 import '../../core/entitlements/entitlement_provider.dart';
 import '../../core/entitlements/plan_tier.dart';
 import '../../features/auth/presentation/providers/auth_session_provider.dart';
@@ -35,27 +35,14 @@ class AppInitNotifier extends AsyncNotifier<bool> {
       rethrow; // auth_cache is required — surface the error
     }
 
-    // 3. Seed dummy data (dev/debug builds only)
-    assert(() {
-      seedDummyData(HiveService.instance, force: true);
-      return true;
-    }());
-
-    // 4. Clean old logs — non-critical, run last
-    try {
-      await logger.cleanOldLogs(keepDays: 7);
-      logger.info('AppInit', 'Old logs cleaned');
-    } catch (_) {
-      // Never block startup for log cleanup
+    // 3. Seed once in debug builds. Awaiting prevents Hive reads/writes from
+    // racing startup; force=false preserves developer data on later launches.
+    if (kDebugMode) {
+      await seedDummyData(HiveService.instance);
     }
 
-    // 4c. Backfill call log customer links — non-critical, run after Hive init
-    try {
-      await HiveService.instance.backfillCallLogCustomerLinks();
-      logger.info('AppInit', 'Call log customer links backfilled');
-    } catch (_) {
-      // Never block startup for backfill
-    }
+    // 4. Non-critical maintenance continues after navigation is unblocked.
+    unawaited(_runMaintenance());
 
     // ── STEP 5 (NEW) — Entitlements ──────────────────────────────────────────
     // Must run AFTER Firebase (step 1) and Hive (step 2) are ready.
@@ -101,5 +88,49 @@ class AppInitNotifier extends AsyncNotifier<bool> {
     // ── END STEP 5 ────────────────────────────────────────────────────────────
 
     return true; // AsyncData(true) → SplashScreen navigates
+  }
+
+  Future<void> _runMaintenance() async {
+    try {
+      await logger.cleanOldLogs(keepDays: 7);
+      logger.info('AppInit', 'Old logs cleaned');
+    } catch (_) {
+      // Never block startup for log cleanup.
+    }
+
+    try {
+      await HiveService.instance.backfillCustomerIds();
+      logger.info('AppInit', 'Customer ids backfilled');
+    } catch (_) {
+      // Never block startup for backfill.
+    }
+
+    try {
+      await HiveService.instance.backfillCallLogCustomerLinks();
+      logger.info('AppInit', 'Call log customer links backfilled');
+    } catch (_) {
+      // Never block startup for backfill.
+    }
+
+    try {
+      await HiveService.instance.backfillServiceIds();
+      logger.info('AppInit', 'Service ids backfilled');
+    } catch (_) {
+      // Never block startup for backfill.
+    }
+
+    try {
+      await HiveService.instance.backfillServiceStationIds();
+      logger.info('AppInit', 'Service station ids backfilled');
+    } catch (_) {
+      // Never block startup for backfill.
+    }
+
+    try {
+      await HiveService.instance.backfillAppointmentIds();
+      logger.info('AppInit', 'Appointment ids backfilled');
+    } catch (_) {
+      // Never block startup for backfill.
+    }
   }
 }
